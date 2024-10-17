@@ -5,7 +5,10 @@ from diffusers.image_processor import PipelineImageInput
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl import StableDiffusionXLPipeline, retrieve_timesteps, rescale_noise_cfg, EXAMPLE_DOC_STRING
 from diffusers.pipelines.stable_diffusion_xl.pipeline_output import StableDiffusionXLPipelineOutput
+from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
+# TODO: create consistent names of functions and files...
 from new_functions.pipe_new_encode_prompt import new_encode_prompt
+from unet_new_forward import unet_new_forward
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -303,7 +306,7 @@ def pipe_new_call(
         lora_scale=lora_scale,
         clip_skip=self.clip_skip,
     )
-    print(f"inside 'pipe_new_call', tokenized_text_inputs is: {tokenized_text_inputs}")
+
     # 4. Prepare timesteps
     timesteps, num_inference_steps = retrieve_timesteps(
         self.scheduler, num_inference_steps, device, timesteps, sigmas
@@ -410,6 +413,7 @@ def pipe_new_call(
             added_cond_kwargs = {"text_embeds": add_text_embeds, "time_ids": add_time_ids}
             if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
                 added_cond_kwargs["image_embeds"] = image_embeds
+            self.unet.forward = unet_new_forward.__get__(self.unet, UNet2DConditionModel)
             noise_pred = self.unet(
                 latent_model_input,
                 t,
@@ -418,6 +422,7 @@ def pipe_new_call(
                 cross_attention_kwargs=self.cross_attention_kwargs,
                 added_cond_kwargs=added_cond_kwargs,
                 return_dict=False,
+                tokenized_text_inputs=tokenized_text_inputs
             )[0]
 
             # perform guidance
