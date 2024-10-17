@@ -8,7 +8,7 @@ from diffusers.pipelines.stable_diffusion_xl.pipeline_output import StableDiffus
 from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
 # TODO: create consistent names of functions and files...
 from new_functions.pipe_new_encode_prompt import new_encode_prompt
-from unet_new_forward import unet_new_forward
+from new_functions.unet_new_forward import unet_new_forward
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -413,7 +413,11 @@ def pipe_new_call(
             added_cond_kwargs = {"text_embeds": add_text_embeds, "time_ids": add_time_ids}
             if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
                 added_cond_kwargs["image_embeds"] = image_embeds
-            self.unet.forward = unet_new_forward.__get__(self.unet, UNet2DConditionModel)
+                
+            for name, module in self.unet.named_modules():
+                if name.endswith("attn2") and isinstance(module, Attention):
+                    module.
+                
             noise_pred = self.unet(
                 latent_model_input,
                 t,
@@ -422,7 +426,6 @@ def pipe_new_call(
                 cross_attention_kwargs=self.cross_attention_kwargs,
                 added_cond_kwargs=added_cond_kwargs,
                 return_dict=False,
-                tokenized_text_inputs=tokenized_text_inputs
             )[0]
 
             # perform guidance
