@@ -44,7 +44,6 @@ def new_forward(
         # The `Attention` class can call different attention processors / attention functions
         # here we simply pass along all tensors to the selected processor class
         # For standard processors that are defined here, `**cross_attention_kwargs` is empty
-        print(f'encoder_hidden_states shape is: {encoder_hidden_states.shape} and its:\n{encoder_hidden_states}')
         attn_parameters = set(inspect.signature(self.processor.__call__).parameters.keys())
         quiet_attn_parameters = {"ip_adapter_masks"}
         unused_kwargs = [
@@ -55,7 +54,7 @@ def new_forward(
                 f"cross_attention_kwargs {unused_kwargs} are not expected by {self.processor.__class__.__name__} and will be ignored."
             )
         cross_attention_kwargs = {k: w for k, w in cross_attention_kwargs.items() if k in attn_parameters}
-        
+        print(f'Inside "new_processor_call", attention_mask is: {attention_mask}')
         self.processor.__call__ = new_processor_call.__get__(self.processor, AttnProcessor2_0)
         return self.processor.__call__(
             self,
@@ -130,7 +129,7 @@ def new_processor_call(
     hidden_states, calculated_concatenated_attention_maps = custom_scaled_dot_product_attention(
         query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False, concatenated_attention_maps=self.concatenated_attention_maps
     )
-
+    print(f'Inside "new_forward", attention_mask is: {attention_mask}')
     self.concatenated_attention_maps = calculated_concatenated_attention_maps
 
     hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
@@ -168,19 +167,18 @@ def custom_scaled_dot_product_attention(query, key, value, attn_mask=None, dropo
     else:
       concatenated_attention_maps = np.concatenate((concatenated_attention_maps, current_attention_map_mean_over_heads), axis=0)
 
-    if concatenated_attention_maps.shape[0] == 50:
-      average_concatenated_attention_maps_over_all_timesteps = concatenated_attention_maps.mean(axis=0)
-      image_resolution_height_and_width = int(math.sqrt(average_concatenated_attention_maps_over_all_timesteps.shape[0]))
-      images = [average_concatenated_attention_maps_over_all_timesteps[:, i].reshape(image_resolution_height_and_width, image_resolution_height_and_width) for i in range(77)]
-      fig, axes = plt.subplots(11, 7, figsize=(14, 22))
-      fig.suptitle("Attention Maps")
-      axes = axes.flatten()
-      for i in range(77):
-        ax = axes[i]
-        ax.imshow(images[i], cmap='viridis')
-
-      plt.tight_layout(rect=[0, 0, 1, 0.95])
-      plt.show()
+    # if concatenated_attention_maps.shape[0] == 50:
+    #   average_concatenated_attention_maps_over_all_timesteps = concatenated_attention_maps.mean(axis=0)
+    #   image_resolution_height_and_width = int(math.sqrt(average_concatenated_attention_maps_over_all_timesteps.shape[0]))
+    #   images = [average_concatenated_attention_maps_over_all_timesteps[:, i].reshape(image_resolution_height_and_width, image_resolution_height_and_width) for i in range(77)]
+    #   fig, axes = plt.subplots(11, 7, figsize=(14, 22))
+    #   fig.suptitle("Attention Maps")
+    #   axes = axes.flatten()
+    #   for i in range(77):
+    #     ax = axes[i]
+    #     ax.imshow(images[i], cmap='viridis')
+    #   plt.tight_layout(rect=[0, 0, 1, 0.95])
+    #   plt.show()
 
 
     # 4. Multiply by the values
@@ -826,9 +824,7 @@ def new_encode_prompt(
                 truncation=True,
                 return_tensors="pt",
             )
-            print(f"tokenized text_inputs is: {text_inputs}")
             text_input_ids = text_inputs.input_ids
-            print(f"text_input_ids is: {text_input_ids}")
             untruncated_ids = tokenizer(prompt, padding="longest", return_tensors="pt").input_ids
 
             if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(
