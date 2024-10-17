@@ -236,4 +236,4 @@ def new_encode_prompt(
         if isinstance(self, StableDiffusionXLLoraLoaderMixin) and USE_PEFT_BACKEND:
             # Retrieve the original scale by scaling back the LoRA layers
             unscale_lora_layers(self.text_encoder_2, lora_scale)
-    return prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds
+    return prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds, text_inputs

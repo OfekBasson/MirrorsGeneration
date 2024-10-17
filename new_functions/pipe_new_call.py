@@ -3,8 +3,9 @@ from diffusers.utils import replace_example_docstring, is_torch_xla_available
 from typing import Union, Optional, List, Dict, Any, Tuple, Callable
 from diffusers.image_processor import PipelineImageInput
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
-from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl import retrieve_timesteps, rescale_noise_cfg, EXAMPLE_DOC_STRING
+from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl import StableDiffusionXLPipeline, retrieve_timesteps, rescale_noise_cfg, EXAMPLE_DOC_STRING
 from diffusers.pipelines.stable_diffusion_xl.pipeline_output import StableDiffusionXLPipelineOutput
+from new_functions.pipe_new_encode_prompt import new_encode_prompt
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -280,12 +281,13 @@ def pipe_new_call(
     lora_scale = (
         self.cross_attention_kwargs.get("scale", None) if self.cross_attention_kwargs is not None else None
     )
-
+    self.encode_prompt = new_encode_prompt.__get__(self, StableDiffusionXLPipeline)
     (
         prompt_embeds,
         negative_prompt_embeds,
         pooled_prompt_embeds,
         negative_pooled_prompt_embeds,
+        tokenized_text_inputs
     ) = self.encode_prompt(
         prompt=prompt,
         prompt_2=prompt_2,
@@ -301,7 +303,7 @@ def pipe_new_call(
         lora_scale=lora_scale,
         clip_skip=self.clip_skip,
     )
-
+    print(f"inside 'pipe_new_call', tokenized_text_inputs is: {tokenized_text_inputs}")
     # 4. Prepare timesteps
     timesteps, num_inference_steps = retrieve_timesteps(
         self.scheduler, num_inference_steps, device, timesteps, sigmas
