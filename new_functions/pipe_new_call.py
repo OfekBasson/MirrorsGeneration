@@ -6,9 +6,9 @@ from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl import StableDiffusionXLPipeline, retrieve_timesteps, rescale_noise_cfg, EXAMPLE_DOC_STRING
 from diffusers.pipelines.stable_diffusion_xl.pipeline_output import StableDiffusionXLPipelineOutput
 from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
+from diffusers.models.attention import Attention
 # TODO: create consistent names of functions and files...
 from new_functions.pipe_new_encode_prompt import new_encode_prompt
-from new_functions.unet_new_forward import unet_new_forward
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -218,7 +218,6 @@ def pipe_new_call(
         [`~pipelines.stable_diffusion_xl.StableDiffusionXLPipelineOutput`] if `return_dict` is True, otherwise a
         `tuple`. When returning a tuple, the first element is a list with the generated images.
     """
-    print("Invoked pipe_new_call")
     callback = kwargs.pop("callback", None)
     callback_steps = kwargs.pop("callback_steps", None)
 
@@ -290,7 +289,9 @@ def pipe_new_call(
         negative_prompt_embeds,
         pooled_prompt_embeds,
         negative_pooled_prompt_embeds,
-        tokenized_text_inputs
+        tokenized_prompt, 
+        # TODO: Understand if the tokenized_negative_prompt is necessary
+        tokenized_negative_prompt
     ) = self.encode_prompt(
         prompt=prompt,
         prompt_2=prompt_2,
@@ -416,7 +417,7 @@ def pipe_new_call(
                 
             for name, module in self.unet.named_modules():
                 if name.endswith("attn2") and isinstance(module, Attention):
-                    module.
+                    module.tokenized_prompt = tokenized_prompt
                 
             noise_pred = self.unet(
                 latent_model_input,

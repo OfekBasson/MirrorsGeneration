@@ -31,6 +31,8 @@ def custom_scaled_dot_product_attention(query, key, value, attn_mask=None, dropo
 
     return output, concatenated_attention_maps
 
+
+
 def display_attention_maps(concatenated_attention_maps: torch) -> None:
     # average_concatenated_attention_maps_over_all_timesteps = concatenated_attention_maps.mean(axis=0)
     # image_resolution_height_and_width = int(math.sqrt(average_concatenated_attention_maps_over_all_timesteps.shape[0]))
@@ -47,4 +49,3 @@ def display_attention_maps(concatenated_attention_maps: torch) -> None:
     # plt.tight_layout(rect=[0, 0, 0.5, 0.5])
     # plt.show()
     return
-
