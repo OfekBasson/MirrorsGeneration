@@ -18,7 +18,7 @@ import math
 from diffusers.models.attention_processor import AttnProcessor2_0
 import re
 
-def new_forward(
+def new_attention_module_forward(
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: Optional[torch.Tensor] = None,
