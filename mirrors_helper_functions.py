@@ -10,10 +10,11 @@ from diffusers import StableDiffusionXLPipeline
 from diffusers.models.attention import Attention
 
 # TODO: Should I transform the "list" into "Optional[List] or something? what are the differences between both?"
-def register_tokenized_prompt_into_pipe_attention_modules(pipe: StableDiffusionXLPipeline = None, tokenized_prompt: list = None) -> None:
+def register_tokenized_prompt_and_module_name_into_pipe_attention_modules(pipe: StableDiffusionXLPipeline = None, tokenized_prompt: list = None) -> None:
     for name, module in pipe.unet.named_modules():
       if name.endswith("attn2") and isinstance(module, Attention):
         module.tokenized_prompt = tokenized_prompt
+        module.name = name
 
 def custom_scaled_dot_product_attention(query, 
                                         key, 
@@ -22,7 +23,8 @@ def custom_scaled_dot_product_attention(query,
                                         dropout_p=0.0, 
                                         is_causal=False, 
                                         concatenated_attention_maps=None,
-                                        tokenized_prompt: list = None
+                                        tokenized_prompt: list = None,
+                                        module_name: str = ""
                                         ):
     # 1. Compute the dot product between query and key (transposed)
     d_k = query.size(-1)  # Get the dimensionality of the key
@@ -41,7 +43,10 @@ def custom_scaled_dot_product_attention(query,
       concatenated_attention_maps = np.concatenate((concatenated_attention_maps, current_attention_map_mean_over_heads), axis=0)
     
     if concatenated_attention_maps.shape[0] == 50:
-      display_attention_maps(concatenated_attention_maps=concatenated_attention_maps, tokenized_prompt=tokenized_prompt)
+      display_attention_maps(concatenated_attention_maps=concatenated_attention_maps, 
+                             tokenized_prompt=tokenized_prompt, 
+                             module_name=module_name
+                             )
 
     # 4. Multiply by the values
     output = torch.matmul(attention_weights, value)
@@ -49,7 +54,10 @@ def custom_scaled_dot_product_attention(query,
     return output, concatenated_attention_maps
 
 
-def display_attention_maps(concatenated_attention_maps: torch.Tensor, tokenized_prompt: list = None) -> None:
+def display_attention_maps(concatenated_attention_maps: torch.Tensor, 
+                           tokenized_prompt: list = None,
+                           module_name: str = ""
+                           ) -> None:
     # Take the mean over all timesteps
     average_concatenated_attention_maps_over_all_timesteps = concatenated_attention_maps.mean(axis=0)
     
@@ -67,8 +75,9 @@ def display_attention_maps(concatenated_attention_maps: torch.Tensor, tokenized_
     images = [average_concatenated_attention_maps_over_all_timesteps[:, i].reshape(image_resolution_height_and_width, image_resolution_height_and_width) for i in range(num_images)]
     
     # Set up the figure for displaying images
-    fig, axes = plt.subplots(1, num_images, figsize=(num_images * 2, 4))
-    fig.suptitle("Attention Maps")
+    
+    fig, axes = plt.subplots(1, num_images, figsize=(num_images * 2, math.ceil(num_images / 10) * 2 + 1))
+    fig.suptitle(f"Cross Attention Maps for module: {module_name}")
     axes = axes.flatten()
 
     # Titles for the images
@@ -84,5 +93,5 @@ def display_attention_maps(concatenated_attention_maps: torch.Tensor, tokenized_
     for i in range(num_images, len(axes)):
         axes[i].axis('off')
     
-    plt.tight_layout(rect=[0, 0, 0.5, 0.95])
+    plt.tight_layout()
     plt.show()

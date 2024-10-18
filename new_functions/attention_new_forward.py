@@ -4,6 +4,8 @@ import inspect
 from new_functions.processor_new_call import new_processor_call
 from diffusers.models.attention_processor import AttnProcessor2_0
 
+# TODO: Maybe forward a function into the bottom call as a callback and invoke it from there instead of passing it over the whole "chain"
+
 def new_attention_module_forward(
         self,
         hidden_states: torch.Tensor,
@@ -47,5 +49,6 @@ def new_attention_module_forward(
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
             tokenized_prompt=self.tokenized_prompt,
+            module_name = self.name,
             **cross_attention_kwargs,
         )

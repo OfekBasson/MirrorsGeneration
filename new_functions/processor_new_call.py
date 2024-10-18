@@ -13,6 +13,7 @@ def new_processor_call(
     # TODO: change list to Optional[List] or something?
     # TODO: Isn't it better to save the tokenized_prompt directly inside the processor instead of inside the Attention instance and forward it to the processor?
     tokenized_prompt: list = None,
+    module_name: str = "",
     *args,
     **kwargs,
     ) -> torch.Tensor:
@@ -75,7 +76,8 @@ def new_processor_call(
         dropout_p=0.0, 
         is_causal=False, 
         concatenated_attention_maps=self.concatenated_attention_maps, 
-        tokenized_prompt=tokenized_prompt
+        tokenized_prompt=tokenized_prompt,
+        module_name = module_name
     )
     self.concatenated_attention_maps = calculated_concatenated_attention_maps
 
