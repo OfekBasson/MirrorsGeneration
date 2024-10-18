@@ -114,15 +114,16 @@ def new_encode_prompt(
             if isinstance(self, TextualInversionLoaderMixin):
                 prompt = self.maybe_convert_prompt(prompt, tokenizer)
 
-            text_inputs, tokenized_prompt = tokenizer(
+            text_inputs = tokenizer(
                 prompt,
                 padding="max_length",
                 max_length=tokenizer.model_max_length,
                 truncation=True,
                 return_tensors="pt",
+                pipe=self
             )
             text_input_ids = text_inputs.input_ids
-            untruncated_ids = tokenizer(prompt, padding="longest", return_tensors="pt")[0].input_ids
+            untruncated_ids = tokenizer(prompt, padding="longest", return_tensors="pt", pipe=self).input_ids
 
             if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(
                 text_input_ids, untruncated_ids
@@ -183,12 +184,13 @@ def new_encode_prompt(
                 negative_prompt = self.maybe_convert_prompt(negative_prompt, tokenizer)
 
             max_length = prompt_embeds.shape[1]
-            uncond_input, tokenized_negative_prompt = tokenizer(
+            uncond_input = tokenizer(
                 negative_prompt,
                 padding="max_length",
                 max_length=max_length,
                 truncation=True,
                 return_tensors="pt",
+                pipe=self,
             )
 
             negative_prompt_embeds = text_encoder(
@@ -242,4 +244,4 @@ def new_encode_prompt(
         if isinstance(self, StableDiffusionXLLoraLoaderMixin) and USE_PEFT_BACKEND:
             # Retrieve the original scale by scaling back the LoRA layers
             unscale_lora_layers(self.text_encoder_2, lora_scale)
-    return prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds, tokenized_prompt, tokenized_negative_prompt
+    return prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds

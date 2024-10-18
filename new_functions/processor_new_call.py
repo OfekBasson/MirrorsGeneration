@@ -10,6 +10,9 @@ def new_processor_call(
     encoder_hidden_states: Optional[torch.Tensor] = None,
     attention_mask: Optional[torch.Tensor] = None,
     temb: Optional[torch.Tensor] = None,
+    # TODO: change list to Optional[List] or something?
+    # TODO: Isn't it better to save the tokenized_prompt directly inside the processor instead of inside the Attention instance and forward it to the processor?
+    tokenized_prompt: list = None,
     *args,
     **kwargs,
     ) -> torch.Tensor:
@@ -65,7 +68,14 @@ def new_processor_call(
     # the output of sdp = (batch, num_heads, seq_len, head_dim)
     # TODO: add support for attn.scale when we move to Torch 2.1
     hidden_states, calculated_concatenated_attention_maps = custom_scaled_dot_product_attention(
-        query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False, concatenated_attention_maps=self.concatenated_attention_maps
+        query, 
+        key, 
+        value, 
+        attn_mask=attention_mask, 
+        dropout_p=0.0, 
+        is_causal=False, 
+        concatenated_attention_maps=self.concatenated_attention_maps, 
+        tokenized_prompt=tokenized_prompt
     )
     self.concatenated_attention_maps = calculated_concatenated_attention_maps
 

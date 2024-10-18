@@ -289,9 +289,7 @@ def pipe_new_call(
         negative_prompt_embeds,
         pooled_prompt_embeds,
         negative_pooled_prompt_embeds,
-        tokenized_prompt, 
         # TODO: Understand if the tokenized_negative_prompt is necessary
-        tokenized_negative_prompt
     ) = self.encode_prompt(
         prompt=prompt,
         prompt_2=prompt_2,
@@ -414,10 +412,6 @@ def pipe_new_call(
             added_cond_kwargs = {"text_embeds": add_text_embeds, "time_ids": add_time_ids}
             if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
                 added_cond_kwargs["image_embeds"] = image_embeds
-                
-            for name, module in self.unet.named_modules():
-                if name.endswith("attn2") and isinstance(module, Attention):
-                    module.tokenized_prompt = tokenized_prompt
                 
             noise_pred = self.unet(
                 latent_model_input,
