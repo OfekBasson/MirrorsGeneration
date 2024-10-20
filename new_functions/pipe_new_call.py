@@ -5,8 +5,11 @@ from diffusers.image_processor import PipelineImageInput
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl import StableDiffusionXLPipeline, retrieve_timesteps, rescale_noise_cfg, EXAMPLE_DOC_STRING
 from diffusers.pipelines.stable_diffusion_xl.pipeline_output import StableDiffusionXLPipelineOutput
-from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
 from diffusers.models.attention import Attention
+from diffusers.models import Transformer2DModel
+from new_functions.attention_new_forward import new_attention_module_forward
+from mirrors_helper_functions import display_attention_maps
+
 # TODO: create consistent names of functions and files...
 from new_functions.pipe_new_encode_prompt import new_encode_prompt
 
@@ -218,6 +221,14 @@ def pipe_new_call(
         [`~pipelines.stable_diffusion_xl.StableDiffusionXLPipelineOutput`] if `return_dict` is True, otherwise a
         `tuple`. When returning a tuple, the first element is a list with the generated images.
     """
+    # print("Invoked pipe_new_call. self.concatenated_attention_maps_over_all_steps_and_attention_modules is: {self.concatenated_attention_maps_over_all_steps_and_attention_modules}")
+    for name, module in self.unet.named_modules():
+        if name.endswith("attn2") and isinstance(module, Attention):
+            module.forward = new_attention_module_forward.__get__(module, Transformer2DModel)
+            module.processor.concatenated_attention_maps = None
+            module.processor.pipe = self
+            # module.processor.concatenated_attention_maps_over_all_steps_and_attention_modules = self.concatenated_attention_maps_over_all_steps_and_attention_modules
+    
     callback = kwargs.pop("callback", None)
     callback_steps = kwargs.pop("callback_steps", None)
 
@@ -511,6 +522,10 @@ def pipe_new_call(
     # Offload all models
     self.maybe_free_model_hooks()
 
+    display_attention_maps(concatenated_attention_maps=self.concatenated_attention_maps_over_all_steps_and_attention_modules, 
+                           tokenized_prompt=self.tokenized_prompt,
+                           module_name="Average Attention Maps Over All Steps And Attention Modules")
+    
     if not return_dict:
         return (image,)
 
