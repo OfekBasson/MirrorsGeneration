@@ -13,7 +13,7 @@ from transformers.tokenization_utils_base import (
 )
 from transformers.utils import PaddingStrategy, TensorType
 from diffusers import StableDiffusionXLPipeline
-from mirrors_helper_functions import register_tokenized_prompt_and_module_name_into_pipe_and_its_attention_modules
+from mirrors_helper_functions import register_tokenized_prompt_and_module_name_and_index_into_pipe_and_its_attention_modules
 
 def _encode_plus(
         self,
@@ -41,20 +41,20 @@ def _encode_plus(
         def get_input_ids(text):
             if isinstance(text, str):
                 tokens = self.tokenize(text, **kwargs)
-                register_tokenized_prompt_and_module_name_into_pipe_and_its_attention_modules(pipe, tokens)
+                register_tokenized_prompt_and_module_name_and_index_into_pipe_and_its_attention_modules(pipe, tokens)
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
                 if is_split_into_words:
                     tokens = list(
                         itertools.chain(*(self.tokenize(t, is_split_into_words=True, **kwargs) for t in text))
                     )
-                    register_tokenized_prompt_and_module_name_into_pipe_and_its_attention_modules(pipe, tokens)
+                    register_tokenized_prompt_and_module_name_and_index_into_pipe_and_its_attention_modules(pipe, tokens)
                     return self.convert_tokens_to_ids(tokens)
                 else:
-                    register_tokenized_prompt_and_module_name_into_pipe_and_its_attention_modules(pipe, tokens)
+                    register_tokenized_prompt_and_module_name_and_index_into_pipe_and_its_attention_modules(pipe, tokens)
                     return self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
-                register_tokenized_prompt_and_module_name_into_pipe_and_its_attention_modules(pipe, tokens)
+                register_tokenized_prompt_and_module_name_and_index_into_pipe_and_its_attention_modules(pipe, tokens)
                 return text
             else:
                 if is_split_into_words:
@@ -133,20 +133,20 @@ def _batch_encode_plus(
         def get_input_ids(text):
             if isinstance(text, str):
                 tokens = self.tokenize(text, **kwargs)
-                register_tokenized_prompt_and_module_name_into_pipe_and_its_attention_modules(pipe, tokens)
+                register_tokenized_prompt_and_module_name_and_index_into_pipe_and_its_attention_modules(pipe, tokens)
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
                 if is_split_into_words:
                     tokens = list(
                         itertools.chain(*(self.tokenize(t, is_split_into_words=True, **kwargs) for t in text))
                     )
-                    register_tokenized_prompt_and_module_name_into_pipe_and_its_attention_modules(pipe, tokens)
+                    register_tokenized_prompt_and_module_name_and_index_into_pipe_and_its_attention_modules(pipe, tokens)
                     return self.convert_tokens_to_ids(tokens)
                 else:
-                    register_tokenized_prompt_and_module_name_into_pipe_and_its_attention_modules(pipe, tokens)
+                    register_tokenized_prompt_and_module_name_and_index_into_pipe_and_its_attention_modules(pipe, tokens)
                     return self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
-                register_tokenized_prompt_and_module_name_into_pipe_and_its_attention_modules(pipe, tokens)
+                register_tokenized_prompt_and_module_name_and_index_into_pipe_and_its_attention_modules(pipe, tokens)
                 return text
             else:
                 raise ValueError(

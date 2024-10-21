@@ -8,7 +8,7 @@ from diffusers.pipelines.stable_diffusion_xl.pipeline_output import StableDiffus
 from diffusers.models.attention import Attention
 from diffusers.models import Transformer2DModel
 from new_functions.attention_new_forward import new_attention_module_forward
-from mirrors_helper_functions import display_attention_maps
+from mirrors_helper_functions import display_attention_maps_and_rank_each_of_them_manually
 
 # TODO: create consistent names of functions and files...
 from new_functions.pipe_new_encode_prompt import new_encode_prompt
@@ -522,7 +522,7 @@ def pipe_new_call(
     # Offload all models
     self.maybe_free_model_hooks()
 
-    display_attention_maps(concatenated_attention_maps=self.concatenated_attention_maps_over_all_steps_and_attention_modules, 
+    display_attention_maps_and_rank_each_of_them_manually(concatenated_attention_maps=self.concatenated_attention_maps_over_all_steps_and_attention_modules, 
                            tokenized_prompt=self.tokenized_prompt,
                            module_name="Average Attention Maps Over All Steps And Attention Modules")
     

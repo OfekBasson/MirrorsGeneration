@@ -50,5 +50,6 @@ def new_attention_module_forward(
             attention_mask=attention_mask,
             tokenized_prompt=self.tokenized_prompt,
             module_name = self.name,
+            attention_layer_index = self.attention_layer_index
             **cross_attention_kwargs,
         )
