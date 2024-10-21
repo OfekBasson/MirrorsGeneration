@@ -14,7 +14,6 @@ def new_processor_call(
     # TODO: Isn't it better to save the tokenized_prompt directly inside the processor instead of inside the Attention instance and forward it to the processor?
     tokenized_prompt: list = None,
     module_name: str = "",
-    attention_layer_index: int = 0,
     *args,
     **kwargs,
     ) -> torch.Tensor:
@@ -70,7 +69,8 @@ def new_processor_call(
 
     # the output of sdp = (batch, num_heads, seq_len, head_dim)
     # TODO: add support for attn.scale when we move to Torch 2.1
-    hidden_states, calculated_concatenated_attention_maps, concatenated_attention_maps_over_all_steps_and_attention_modules, updated_attention_quality_score = custom_scaled_dot_product_attention(
+    # print(f"Inside 'new_processor_call', self.pipe.attention_quality_score is: {self.pipe.attention_quality_score}")
+    hidden_states, calculated_concatenated_attention_maps, concatenated_attention_maps_over_all_steps_and_attention_modules = custom_scaled_dot_product_attention(
         query, 
         key, 
         value, 
@@ -81,17 +81,15 @@ def new_processor_call(
         tokenized_prompt=tokenized_prompt,
         module_name = module_name,
         concatenated_attention_maps_over_all_steps_and_attention_modules = self.pipe.concatenated_attention_maps_over_all_steps_and_attention_modules,
-        attention_quality_score = self.pipe.attention_quality_score,
-        attention_layer_index = attention_layer_index
+
     )
-    
+    # print(f"updated_attention_quality_score which was returned from 'custom_scaled_dot_product_attention' is: {updated_attention_quality_score}")
     self.concatenated_attention_maps = calculated_concatenated_attention_maps
     # print(f'Inside "new_processor_call". concatenated_attention_maps_over_all_steps_and_attention_modules which returned from "custom_scaled_dot_product_attention shape is: {"None" if concatenated_attention_maps_over_all_steps_and_attention_modules is None else concatenated_attention_maps_over_all_steps_and_attention_modules.shape}')
     # print(f'Inside "new_processor_call". self.pipe.concatenated_attention_maps_over_all_steps_and_attention_modules shape before assignment is: {"None" if self.pipe.concatenated_attention_maps_over_all_steps_and_attention_modules is None else self.pipe.concatenated_attention_maps_over_all_steps_and_attention_modules.shape}')
     # TODO: I keep it only for the self (=processor) and not for the pipe
     self.pipe.concatenated_attention_maps_over_all_steps_and_attention_modules = concatenated_attention_maps_over_all_steps_and_attention_modules
-    self.pipe.attention_quality_score = updated_attention_quality_score
-    print(f'self.pipe.attention_quality_score for module_name: {module_name} is: {self.pipe.attention_quality_score} ')
+    # print(f'self.pipe.attention_quality_score for module_name: {module_name} is: {self.pipe.attention_quality_score} ')
     # print(f'Inside "new_processor_call". self.pipe.concatenated_attention_maps_over_all_steps_and_attention_modules shape after assignment is: {"None" if self.pipe.concatenated_attention_maps_over_all_steps_and_attention_modules is None else self.pipe.concatenated_attention_maps_over_all_steps_and_attention_modules.shape}')
 
     hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)

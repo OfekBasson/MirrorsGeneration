@@ -12,13 +12,10 @@ from diffusers.models.attention import Attention
 # TODO: Should I transform the "list" into "Optional[List] or something? what are the differences between both?"
 def register_tokenized_prompt_and_module_name_and_index_into_pipe_and_its_attention_modules(pipe: StableDiffusionXLPipeline = None, tokenized_prompt: list = None) -> None:
     pipe.tokenized_prompt = tokenized_prompt
-    i = 0
     for name, module in pipe.unet.named_modules():
       if name.endswith("attn2") and isinstance(module, Attention):
         module.tokenized_prompt = tokenized_prompt
         module.name = name
-        module.attention_layer_index = i
-        i += 1
 
 
 def custom_scaled_dot_product_attention(query, 
@@ -31,8 +28,6 @@ def custom_scaled_dot_product_attention(query,
                                         tokenized_prompt: list = None,
                                         module_name: str = "",
                                         concatenated_attention_maps_over_all_steps_and_attention_modules: torch.Tensor = None,
-                                        attention_quality_score: np.array = None,
-                                        attention_layer_index: int = 0
                                         ):
     # 1. Compute the dot product between query and key (transposed)
     d_k = query.size(-1)  # Get the dimensionality of the key
@@ -49,13 +44,11 @@ def custom_scaled_dot_product_attention(query,
       concatenated_current_module_attention_maps = current_step_attention_map_mean_over_heads
     else:
       concatenated_current_module_attention_maps = np.concatenate((concatenated_current_module_attention_maps, current_step_attention_map_mean_over_heads), axis=0)
-    
+    # print(f"Inside 'custom_scaled_dot_product_attention', attention_quality_score is: {attention_quality_score}")    
     if concatenated_current_module_attention_maps.shape[0] == 50:
-      updated_attention_quality_score = display_attention_maps_and_rank_each_of_them_manually(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+      display_attention_maps(concatenated_attention_maps=concatenated_current_module_attention_maps, 
                              tokenized_prompt=tokenized_prompt, 
                              module_name=module_name,
-                             attention_quality_score=attention_quality_score,
-                             attention_layer_index=attention_layer_index
                              )
       # print("Invoked 'custom_scaled_dot_product_attention' after invoking 'display_attention_maps' and before invoking of 'concatenate_current_module_attention_maps_to_all_attention_maps'")
       concatenated_attention_maps_over_all_steps_and_attention_modules = concatenate_current_module_attention_maps_to_all_attention_maps(concatenated_current_module_attention_maps, 
@@ -63,8 +56,7 @@ def custom_scaled_dot_product_attention(query,
       # print(f"Inside custom_scaled_dot_product_attention, concatenated_attention_maps_over_all_steps_and_attention_modules shape which was returned from 'concatenate_current_module_attention_maps_to_all_attention_maps' is: {concatenated_attention_maps_over_all_steps_and_attention_modules.shape}")
     # 4. Multiply by the values
     output = torch.matmul(attention_weights, value)
-
-    return output, concatenated_current_module_attention_maps, concatenated_attention_maps_over_all_steps_and_attention_modules, updated_attention_quality_score
+    return output, concatenated_current_module_attention_maps, concatenated_attention_maps_over_all_steps_and_attention_modules
 
 
 def concatenate_current_module_attention_maps_to_all_attention_maps(concatenated_current_module_attention_maps: torch.Tensor = None, 
@@ -95,12 +87,10 @@ def upsample_concatenated_current_module_attention_maps_to_attention_maps_desire
   upscaled_concatenated_current_module_attention_maps = upscaled_concatenated_current_module_attention_maps.permute(0, 2, 1)
   return upscaled_concatenated_current_module_attention_maps
 
-def display_attention_maps_and_rank_each_of_them_manually(concatenated_attention_maps: torch.Tensor, 
+def display_attention_maps(concatenated_attention_maps: torch.Tensor, 
                            tokenized_prompt: list = None,
                            module_name: str = "",
-                           attention_quality_score: np.array = None, 
-                           attention_layer_index: int = 0
-                           ) -> np.array:
+                           ) -> None:
     # Take the mean over all timesteps
     average_concatenated_attention_maps_over_all_timesteps = concatenated_attention_maps.mean(axis=0)
     
@@ -120,7 +110,7 @@ def display_attention_maps_and_rank_each_of_them_manually(concatenated_attention
     # Set up the figure for displaying images
     
     fig, axes = plt.subplots(1, num_images, figsize=(num_images * 2, math.ceil(num_images / 10) * 2 + 1))
-    title_str = "Average Attention Maps Over All Steps And Attention Modules" if module_name is "Average Attention Maps Over All Steps And Attention Modules" else f"Cross Attention Maps for module: {module_name}"
+    title_str = "Average Attention Maps Over All Steps And Attention Modules" if module_name == "Average Attention Maps Over All Steps And Attention Modules" else f"Cross Attention Maps for module: {module_name}"
     fig.suptitle(title_str)
     axes = axes.flatten()
 
@@ -139,35 +129,7 @@ def display_attention_maps_and_rank_each_of_them_manually(concatenated_attention
     
     plt.tight_layout()
     plt.show()
-    rank = input("Enter rank for those attention maps")
-    index = find_new_rank_index_in_matrix(attention_quality_score=attention_quality_score, attention_layer_index=attention_layer_index)
-    attention_quality_score[index[0], index[1]] = rank
-    return attention_quality_score
     
-def find_new_rank_index_in_matrix(attention_quality_score: np.array = None, 
-                                  attention_layer_index: int = 0) -> tuple:
-    if attention_quality_score is None:
-        raise ValueError("attention_quality_score matrix cannot be None.")
-    
-    if attention_layer_index == 0:
-        first_zeros_column = None
-        for col in range(attention_quality_score.shape[1]):
-            if np.all(attention_quality_score[:, col] == 0):
-                first_zeros_column = col
-                break
-        if first_zeros_column is not None:
-            return (0, first_zeros_column)
-        else:
-            raise ValueError("No all-zero column found.")
-    
-    else:
-        last_row_with_filled_values = None
-        for row in range(attention_quality_score.shape[0] - 1, -1, -1):
-            if np.any(attention_quality_score[row, :] != 0):
-                last_row_with_filled_values = row
-                break
-        if last_row_with_filled_values is not None:
-            return (attention_layer_index, last_row_with_filled_values)
-        else:
-            raise ValueError("No row with non-zero values found.")
+
+            
     
