@@ -44,10 +44,14 @@ def custom_scaled_dot_product_attention(query,
 
     if concatenated_current_module_attention_maps.shape[0] == 50:
       if module_name == "up_blocks.0.attentions.0.transformer_blocks.2.attn2" or module_name == "up_blocks.0.attentions.1.transformer_blocks.1.attn2" or module_name == "up_blocks.0.attentions.1.transformer_blocks.7.attn2" or module_name == "up_blocks.0.attentions.1.transformer_blocks.2.attn2":
-        display_last_attention_map_of_given_module(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+        # display_last_attention_map_of_given_module_over_all_timesteps(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+        #                       tokenized_prompt=tokenized_prompt, 
+        #                       module_name=module_name,
+        #                       )
+        display_thresholded_attention_map_of_given_module(concatenated_attention_maps=concatenated_current_module_attention_maps, 
                               tokenized_prompt=tokenized_prompt, 
-                              module_name=module_name,
-                              )
+                              module_name=module_name
+        )
         # display_attention_maps_per_layer(concatenated_attention_maps=concatenated_current_module_attention_maps, 
         #                       tokenized_prompt=tokenized_prompt, 
         #                       module_name=module_name,
@@ -62,20 +66,16 @@ def custom_scaled_dot_product_attention(query,
 def concatenate_current_module_attention_maps_to_all_attention_maps(concatenated_current_module_attention_maps: torch.Tensor = None, 
                                                                   concatenated_attention_maps_over_all_steps_and_attention_modules: torch.Tensor = None
                                                                   ) -> torch.Tensor:
-    # print(f'Before upscaling, concatenated_current_module_attention_maps shape is: {concatenated_current_module_attention_maps.shape}')
     concatenated_current_module_attention_maps = upsample_concatenated_current_module_attention_maps_to_attention_maps_desired_shape(torch.from_numpy(concatenated_current_module_attention_maps))
-    # print(f'After upscaling, concatenated_current_module_attention_maps shape is: {concatenated_current_module_attention_maps.shape}')
     if concatenated_attention_maps_over_all_steps_and_attention_modules is None:
-        # print("Inside 'concatenate_current_module_attention_maps_to_all_attention_maps'. concatenated_attention_maps_over_all_steps_and_attention_modules Is None")
         concatenated_attention_maps_over_all_steps_and_attention_modules = concatenated_current_module_attention_maps
     else:
-        # print(f'concatenated_attention_maps_over_all_steps_and_attention_modules type is: {type(concatenated_attention_maps_over_all_steps_and_attention_modules)} and concatenated_current_module_attention_maps type is: {type(concatenated_current_module_attention_maps)}')
         concatenated_attention_maps_over_all_steps_and_attention_modules = torch.cat(
             (concatenated_attention_maps_over_all_steps_and_attention_modules, concatenated_current_module_attention_maps), dim=0
         )
     
-    # print(f'Inside "concatenate_current_module_attention_maps_to_all_attention_maps" after the concatenation. concatenated_current_module_attention_maps (will be returned from the function) shape is: {concatenated_current_module_attention_maps.shape} and concatenated_attention_maps_over_all_steps_and_attention_modules shape is: {concatenated_attention_maps_over_all_steps_and_attention_modules.shape}')
     return concatenated_attention_maps_over_all_steps_and_attention_modules
+  
   
 def upsample_concatenated_current_module_attention_maps_to_attention_maps_desired_shape(concatenated_current_module_attention_maps: torch.Tensor = None,
                                                                                         attention_maps_desired_shape: int = 4096
@@ -87,12 +87,12 @@ def upsample_concatenated_current_module_attention_maps_to_attention_maps_desire
   upscaled_concatenated_current_module_attention_maps = upscaled_concatenated_current_module_attention_maps.permute(0, 2, 1)
   return upscaled_concatenated_current_module_attention_maps
 
+
 def display_attention_maps_per_layer(concatenated_attention_maps: np.array, 
                            tokenized_prompt: list = None,
                            module_name: str = "",
                            average_flag: bool = False
                            ) -> None:
-    # Take the mean over all timesteps
     if average_flag:
       average_concatenated_attention_maps_over_all_timesteps = concatenated_attention_maps.mean(axis=0)
       print("average flag is on")
@@ -100,44 +100,35 @@ def display_attention_maps_per_layer(concatenated_attention_maps: np.array,
       average_concatenated_attention_maps_over_all_timesteps = concatenated_attention_maps[-5,:,:]
       print("average flag is off")
     
-    # Calculate image resolution (assuming square images)
     image_resolution_height_and_width = int(math.sqrt(average_concatenated_attention_maps_over_all_timesteps.shape[0]))
     
-    # Replace the assert with a proper if-else condition and raise an exception if dimensions don't match
     if image_resolution_height_and_width ** 2 != average_concatenated_attention_maps_over_all_timesteps.shape[0]:
         raise ValueError("Attention map dimensions do not match a square image resolution.")
     
-    # Determine how many images to show
-    num_images = len(tokenized_prompt) + 2  # +2 for 'start' and 'end'
-    
-    # Create the images for the attention maps (only the required number of images)
+    num_images = len(tokenized_prompt) + 2  
     images = [average_concatenated_attention_maps_over_all_timesteps[:, i].reshape(image_resolution_height_and_width, image_resolution_height_and_width) for i in range(num_images)]
-    
-    # Set up the figure for displaying images
     
     fig, axes = plt.subplots(1, num_images, figsize=(num_images * 2, math.ceil(num_images / 10) * 2 + 1))
     title_str = "Average Attention Maps Over All Steps And Attention Modules" if module_name == "Average Attention Maps Over All Steps And Attention Modules" else f"Cross Attention Maps for module: {module_name}"
     fig.suptitle(title_str)
     axes = axes.flatten()
 
-    # Titles for the images
-    titles = ['start'] + tokenized_prompt + ['end']  # Create titles for 'start', tokenized_prompt words, and 'end'
+    titles = ['start'] + tokenized_prompt + ['end'] 
 
-    # Display the images with titles
     for i in range(num_images):
         ax = axes[i]
         ax.imshow(images[i], cmap='viridis')
-        ax.set_title(titles[i], fontsize=8)  # Assign the corresponding title
+        ax.set_title(titles[i], fontsize=8)  
     
-    # Hide any remaining empty subplots
     for i in range(num_images, len(axes)):
         axes[i].axis('off')
     
     plt.tight_layout()
     plt.show()
 
-def display_last_attention_map_of_given_module(
-    concatenated_attention_maps: torch.Tensor,
+
+def display_last_attention_map_of_given_module_over_all_timesteps(
+    concatenated_attention_maps: np.ndarray,
     tokenized_prompt: list = None,
     module_name: str = ""
 ) -> None:
@@ -163,5 +154,26 @@ def display_last_attention_map_of_given_module(
         plt.show()
 
     
+def display_thresholded_attention_map_of_given_module(
+    concatenated_attention_maps: np.ndarray,
+    tokenized_prompt: list = None,
+    module_name: str = ""
+) -> None:
+  tokens = ["start"] + tokenized_prompt + ["end"]
+  num_images = len(tokens)
 
-        
+  fig, axes = plt.subplots(1, len(tokens), figsize=(num_images * 2, math.ceil(num_images / 10) * 2 + 1))
+  fig.suptitle(f"Attention maps for module {module_name}", fontsize=16)
+
+  for i, token in enumerate(tokens):
+      ax = axes[i]
+      attention_map_tensor = concatenated_attention_maps[-1, :, i]
+      mean_value = attention_map_tensor.median()
+      thresholded_attention_map = np.where(attention_map_tensor > mean_value, 1, 0).reshape(32, 32)
+
+      ax.imshow(thresholded_attention_map, cmap='viridis')
+      ax.set_title(token)
+      ax.axis("off")
+
+  plt.tight_layout(rect=[0, 0, 1, 0.96])
+  plt.show()
