@@ -1,6 +1,7 @@
 # TODO: Object oriented? maybe get all of them into one class?
 # TODO: Reorder imports
 # TODO: Auto formatting
+import cv2
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -43,20 +44,23 @@ def custom_scaled_dot_product_attention(query,
       concatenated_current_module_attention_maps = np.concatenate((concatenated_current_module_attention_maps, current_step_attention_map_mean_over_heads), axis=0)
 
     if concatenated_current_module_attention_maps.shape[0] == 50:
-      if module_name == "up_blocks.0.attentions.0.transformer_blocks.2.attn2" or module_name == "up_blocks.0.attentions.1.transformer_blocks.1.attn2" or module_name == "up_blocks.0.attentions.1.transformer_blocks.7.attn2" or module_name == "up_blocks.0.attentions.1.transformer_blocks.2.attn2":
+      if module_name == "up_blocks.0.attentions.1.transformer_blocks.1.attn2":
         # display_last_attention_map_of_given_module_over_all_timesteps(concatenated_attention_maps=concatenated_current_module_attention_maps, 
         #                       tokenized_prompt=tokenized_prompt, 
         #                       module_name=module_name,
         #                       )
-        display_thresholded_attention_map_of_given_module(concatenated_attention_maps=concatenated_current_module_attention_maps, 
-                              tokenized_prompt=tokenized_prompt, 
-                              module_name=module_name
-        )
+        # display_thresholded_attention_map_of_given_module(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+        #                       tokenized_prompt=tokenized_prompt, 
+        #                       module_name=module_name
+        # )
         # display_attention_maps_per_layer(concatenated_attention_maps=concatenated_current_module_attention_maps, 
         #                       tokenized_prompt=tokenized_prompt, 
         #                       module_name=module_name,
         #                       average_flag=False
         #                       )
+        display_edges_using_canny_edge_detector(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+                              tokenized_prompt=tokenized_prompt, 
+                              module_name=module_name)
       concatenated_attention_maps_over_all_steps_and_attention_modules = concatenate_current_module_attention_maps_to_all_attention_maps(concatenated_current_module_attention_maps, 
                                                                       concatenated_attention_maps_over_all_steps_and_attention_modules)
     output = torch.matmul(attention_weights, value)
@@ -161,19 +165,80 @@ def display_thresholded_attention_map_of_given_module(
 ) -> None:
   tokens = ["start"] + tokenized_prompt + ["end"]
   num_images = len(tokens)
+  thresholds = ["Unthresholded", "Mean", "Median", "75th Percentile"]
 
-  fig, axes = plt.subplots(1, len(tokens), figsize=(num_images * 2, math.ceil(num_images / 10) * 2 + 1))
-  fig.suptitle(f"Attention maps for module {module_name}", fontsize=16)
+  fig, axes = plt.subplots(4, len(tokens), figsize=(num_images * 2, 10))
+  fig.suptitle(f"Attention maps for module {module_name}", fontsize=16, y=1.02)
 
   for i, token in enumerate(tokens):
-      ax = axes[i]
       attention_map_tensor = concatenated_attention_maps[-1, :, i]
-      mean_value = attention_map_tensor.median()
-      thresholded_attention_map = np.where(attention_map_tensor > mean_value, 1, 0).reshape(32, 32)
+      mean_value = np.mean(attention_map_tensor)
+      median_value = np.median(attention_map_tensor)
+      percentile_75 = np.percentile(attention_map_tensor, 75)
 
-      ax.imshow(thresholded_attention_map, cmap='viridis')
-      ax.set_title(token)
-      ax.axis("off")
+      # Unthresholded
+      unthresholded_map = attention_map_tensor.reshape(32, 32)
+      axes[0, i].imshow(unthresholded_map, cmap='viridis')
+      axes[0, i].set_title(f"{token}\n{thresholds[0]}")
+      axes[0, i].axis("off")
+
+      # Thresholded by mean
+      mean_thresholded_map = np.where(attention_map_tensor > mean_value, 1, 0).reshape(32, 32)
+      axes[1, i].imshow(mean_thresholded_map, cmap='viridis')
+      axes[1, i].set_title(thresholds[1])
+      axes[1, i].axis("off")
+
+      # Thresholded by median
+      median_thresholded_map = np.where(attention_map_tensor > median_value, 1, 0).reshape(32, 32)
+      axes[2, i].imshow(median_thresholded_map, cmap='viridis')
+      axes[2, i].set_title(thresholds[2])
+      axes[2, i].axis("off")
+
+      # Thresholded by 75th percentile
+      percentile_75_thresholded_map = np.where(attention_map_tensor > percentile_75, 1, 0).reshape(32, 32)
+      axes[3, i].imshow(percentile_75_thresholded_map, cmap='viridis')
+      axes[3, i].set_title(thresholds[3])
+      axes[3, i].axis("off")
 
   plt.tight_layout(rect=[0, 0, 1, 0.96])
   plt.show()
+
+
+def display_edges_using_canny_edge_detector(
+    concatenated_attention_maps: np.ndarray,
+    tokenized_prompt: list = None,
+    module_name: str = ""
+) -> None:
+    tokens = ["start"] + tokenized_prompt + ["end"]
+    
+    mirror_token_index = tokens.index("mirror</w>") if "mirror</w>" in tokens else -1
+    if mirror_token_index == -1:
+        print("Token 'mirror</w>' not found in tokens list.")
+        return
+
+    print(f"Inside 'display_edges_using_canny_edge_detector', concatenated_attention_maps shape is: {concatenated_attention_maps.shape}")
+    attention_map_tensor = concatenated_attention_maps[-1, :, mirror_token_index].reshape(32, 32).astype(np.float32)
+    upsampled_attention_map_tensor = cv2.resize(attention_map_tensor, (512, 512))
+    
+    scaled_attention_map_ndarray = (upsampled_attention_map_tensor * 255).astype(np.uint8)
+    mean_value = np.mean(scaled_attention_map_ndarray)
+    median_value = np.median(scaled_attention_map_ndarray)
+    percentile_75 = np.percentile(scaled_attention_map_ndarray, 75)
+    
+    lower = int(max(0, 0.67 * median_value))
+    upper = int(min(255, median_value))
+    
+    edges = cv2.Canny(scaled_attention_map_ndarray, lower, upper)
+    
+    # Display the attention map and edges side by side
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    axes[0].imshow(upsampled_attention_map_tensor, cmap='viridis')
+    axes[0].set_title("Attention Map")
+    
+    axes[1].imshow(edges, cmap='gray')
+    axes[1].set_title(f"Canny Edges")
+    
+    plt.show()
+
+
+    

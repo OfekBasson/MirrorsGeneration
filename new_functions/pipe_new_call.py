@@ -522,10 +522,6 @@ def pipe_new_call(
 
     # Offload all models
     self.maybe_free_model_hooks()
-
-    display_attention_maps_per_layer(concatenated_attention_maps=self.concatenated_attention_maps_over_all_steps_and_attention_modules, 
-                           tokenized_prompt=self.tokenized_prompt,
-                           module_name="Average Attention Maps Over All Steps And Attention Modules")
     
     if not return_dict:
         return (image,)
