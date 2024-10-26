@@ -29,32 +29,32 @@ def custom_scaled_dot_product_attention(query,
                                         module_name: str = "",
                                         concatenated_attention_maps_over_all_steps_and_attention_modules: torch.Tensor = None,
                                         ):
-    # 1. Compute the dot product between query and key (transposed)
-    d_k = query.size(-1)  # Get the dimensionality of the key
+    d_k = query.size(-1)  
     scores = torch.matmul(query, key.transpose(-2, -1)) / torch.sqrt(torch.tensor(d_k, dtype=torch.float32))
 
-    # 2. Apply mask (if provided)
     if attn_mask is not None:
         scores = scores.masked_fill(attn_mask == 0, float('-inf'))
 
-    # 3. Apply softmax to normalize the attention scores
     attention_weights = F.softmax(scores, dim=-1)
     current_step_attention_map_mean_over_heads = np.expand_dims(attention_weights[1].mean(dim=0).cpu().numpy(), axis=0)
     if concatenated_current_module_attention_maps is None:
       concatenated_current_module_attention_maps = current_step_attention_map_mean_over_heads
     else:
       concatenated_current_module_attention_maps = np.concatenate((concatenated_current_module_attention_maps, current_step_attention_map_mean_over_heads), axis=0)
-    # print(f"Inside 'custom_scaled_dot_product_attention', attention_quality_score is: {attention_quality_score}")    
+
     if concatenated_current_module_attention_maps.shape[0] == 50:
-      display_attention_maps(concatenated_attention_maps=concatenated_current_module_attention_maps, 
-                             tokenized_prompt=tokenized_prompt, 
-                             module_name=module_name,
-                             )
-      # print("Invoked 'custom_scaled_dot_product_attention' after invoking 'display_attention_maps' and before invoking of 'concatenate_current_module_attention_maps_to_all_attention_maps'")
+      if module_name == "up_blocks.0.attentions.0.transformer_blocks.2.attn2" or module_name == "up_blocks.0.attentions.1.transformer_blocks.1.attn2" or module_name == "up_blocks.0.attentions.1.transformer_blocks.7.attn2" or module_name == "up_blocks.0.attentions.1.transformer_blocks.2.attn2":
+        display_last_attention_map_of_given_module(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+                              tokenized_prompt=tokenized_prompt, 
+                              module_name=module_name,
+                              )
+        # display_attention_maps_per_layer(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+        #                       tokenized_prompt=tokenized_prompt, 
+        #                       module_name=module_name,
+        #                       average_flag=False
+        #                       )
       concatenated_attention_maps_over_all_steps_and_attention_modules = concatenate_current_module_attention_maps_to_all_attention_maps(concatenated_current_module_attention_maps, 
                                                                       concatenated_attention_maps_over_all_steps_and_attention_modules)
-      # print(f"Inside custom_scaled_dot_product_attention, concatenated_attention_maps_over_all_steps_and_attention_modules shape which was returned from 'concatenate_current_module_attention_maps_to_all_attention_maps' is: {concatenated_attention_maps_over_all_steps_and_attention_modules.shape}")
-    # 4. Multiply by the values
     output = torch.matmul(attention_weights, value)
     return output, concatenated_current_module_attention_maps, concatenated_attention_maps_over_all_steps_and_attention_modules
 
@@ -87,12 +87,18 @@ def upsample_concatenated_current_module_attention_maps_to_attention_maps_desire
   upscaled_concatenated_current_module_attention_maps = upscaled_concatenated_current_module_attention_maps.permute(0, 2, 1)
   return upscaled_concatenated_current_module_attention_maps
 
-def display_attention_maps(concatenated_attention_maps: torch.Tensor, 
+def display_attention_maps_per_layer(concatenated_attention_maps: np.array, 
                            tokenized_prompt: list = None,
                            module_name: str = "",
+                           average_flag: bool = False
                            ) -> None:
     # Take the mean over all timesteps
-    average_concatenated_attention_maps_over_all_timesteps = concatenated_attention_maps.mean(axis=0)
+    if average_flag:
+      average_concatenated_attention_maps_over_all_timesteps = concatenated_attention_maps.mean(axis=0)
+      print("average flag is on")
+    else:
+      average_concatenated_attention_maps_over_all_timesteps = concatenated_attention_maps[-5,:,:]
+      print("average flag is off")
     
     # Calculate image resolution (assuming square images)
     image_resolution_height_and_width = int(math.sqrt(average_concatenated_attention_maps_over_all_timesteps.shape[0]))
@@ -129,7 +135,33 @@ def display_attention_maps(concatenated_attention_maps: torch.Tensor,
     
     plt.tight_layout()
     plt.show()
+
+def display_last_attention_map_of_given_module(
+    concatenated_attention_maps: torch.Tensor,
+    tokenized_prompt: list = None,
+    module_name: str = ""
+) -> None:
+    tokens = ["start"] + tokenized_prompt + ["end"]
+    num_images = len(tokens)
+    num_timesteps, _, _ = concatenated_attention_maps.shape
+
+    for t in range(num_timesteps):
+        fig, axes = plt.subplots(1, len(tokens), figsize=(num_images * 2, math.ceil(num_images / 10) * 2 + 1))
+        fig.suptitle(f"Attention maps for layer {t+1} of module {module_name}", fontsize=16)
+
+        for i, token in enumerate(tokens):
+            ax = axes[i]
+            attention_map_tensor = concatenated_attention_maps[t, :, i]
+
+            attention_map = attention_map_tensor.reshape(32, 32)
+
+            ax.imshow(attention_map, cmap='viridis')
+            ax.set_title(token)
+            ax.axis("off")
+
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        plt.show()
+
     
 
-            
-    
+        
