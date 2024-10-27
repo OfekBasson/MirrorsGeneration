@@ -264,10 +264,31 @@ def get_last_timestep_attention_map_of_given_module(
     
     return normalized_upsampled_attention_map
 
-def preprocess_and_upsample_attention_map(kernel_size: tuple=(0,0), attention_map: np.ndarray=None, image_target_size: tuple=(1024, 1024)) -> np.ndarray:
+def preprocess_and_upsample_attention_map(kernel_size: tuple=(1,1), attention_map: np.ndarray=None, image_target_size: tuple=(1024, 1024)) -> np.ndarray:
     kernel = np.ones(kernel_size, np.uint8)
     dilated_attention_map = cv2.dilate(attention_map, kernel, iterations=1)
     closed_attention_map = cv2.morphologyEx(dilated_attention_map, cv2.MORPH_CLOSE, kernel)
     upsampled_attention_map = cv2.resize(closed_attention_map, image_target_size)
     return upsampled_attention_map
+
+
+def display_images(images, titles, figsize=(24, 5), max_images_per_row=4):
+    num_images = len(images)
+    num_rows = (num_images + max_images_per_row - 1) // max_images_per_row  # Calculate total rows needed
+    fig, axes = plt.subplots(num_rows, max_images_per_row, figsize=(5 * max_images_per_row, 5 * num_rows))
+
+    # Flatten axes array for easy indexing, in case of fewer than max_images_per_row images in the last row
+    axes = axes.ravel() if num_images > 1 else [axes]
+
+    for i in range(num_images):
+        axes[i].imshow(images[i], cmap="gray" if images[i].ndim == 2 else None)
+        axes[i].set_title(titles[i])
+        axes[i].axis("off")
+    
+    # Turn off any remaining empty subplots
+    for j in range(num_images, len(axes)):
+        axes[j].axis("off")
+
+    plt.show()
+    
     
