@@ -272,7 +272,7 @@ def preprocess_and_upsample_attention_map(kernel_size: tuple=(1,1), attention_ma
     return upsampled_attention_map
 
 
-def display_images(images, titles, figsize=(24, 5), max_images_per_row=4):
+def display_images(images, titles, figsize=(24, 5), max_images_per_row=5):
     num_images = len(images)
     num_rows = (num_images + max_images_per_row - 1) // max_images_per_row  # Calculate total rows needed
     fig, axes = plt.subplots(num_rows, max_images_per_row, figsize=(5 * max_images_per_row, 5 * num_rows))
@@ -291,4 +291,69 @@ def display_images(images, titles, figsize=(24, 5), max_images_per_row=4):
 
     plt.show()
     
+def generate_mirror_mask(image: np.ndarray=None, mirror_attention_map: np.ndarray=None) -> np.ndarray:
+    image_np = np.array(image)
+
+    grayscale_image = np.array(image.convert("L"))
+
+    median_value = np.median(grayscale_image)
+    percentile_75 = np.percentile(grayscale_image, 75)
+    lower = int(max(0, median_value))
+    upper = int(min(255, percentile_75))
+
+    edges = cv2.Canny(grayscale_image, lower, upper)
+
+    scaled_attention_map = 1 / (1 + np.exp(-5 * (mirror_attention_map - 0.5)))
+    preprocessed_attention_map = preprocess_and_upsample_attention_map(kernel_size=(1, 1), attention_map=scaled_attention_map)
+
+    threshold_value = np.percentile(scaled_attention_map, 75)
+    thresholded_attention_map = np.where(preprocessed_attention_map >= threshold_value, 1, 0)
+
+    multiplication_of_edges_and_thresholded_attention_map = edges * thresholded_attention_map
+
+    kernel = np.ones((18, 18), np.uint8)
+    dilated_edges = cv2.dilate(multiplication_of_edges_and_thresholded_attention_map.astype(np.uint8), kernel, iterations=1)
+    closed_edges = cv2.morphologyEx(dilated_edges, cv2.MORPH_CLOSE, kernel)
+
+    contours, _ = cv2.findContours(closed_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    contoured_image = image_np.copy()
+    cv2.drawContours(contoured_image, contours, -1, (0, 255, 0), 2)
+
+    largest_contour = max(contours, key=cv2.contourArea)
+    mirror_mask = np.zeros_like(image_np, dtype=np.uint8)
+    cv2.drawContours(mirror_mask, [largest_contour], -1, (255, 255, 255), thickness=cv2.FILLED)
+
+    mirror_mask_over_original_image = np.where(mirror_mask > 0.5, mirror_mask, image_np)
+
+    images = [
+        image_np,
+        grayscale_image,
+        edges,
+        preprocessed_attention_map,
+        thresholded_attention_map,
+        multiplication_of_edges_and_thresholded_attention_map,
+        closed_edges,
+        cv2.cvtColor(contoured_image, cv2.COLOR_BGR2RGB),
+        mirror_mask,
+        mirror_mask_over_original_image
+    ]
+    titles = [
+        "Original Image",
+        "Grayscale Original Image",
+        "Edges of Greyscale Image (W/O any manipulation)",
+        "Preprocessed Attention Map",
+        "Thresholded Attention Map",
+        "Edges * Thresholded Attention Map",
+        "Thickened and Connected Edges",
+        "Contours on Original Image",
+        "Mirror Mask",
+        "Mirror Mask Over Original Image"
+    ]
+
+    # Call display function
+    display_images(images, titles)
     
+    return mirror_mask
+        
+        
