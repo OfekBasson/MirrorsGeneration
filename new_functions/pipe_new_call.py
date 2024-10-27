@@ -525,5 +525,5 @@ def pipe_new_call(
     
     if not return_dict:
         return (image,)
-
+    print(f'self.mirror_attention_map type is: {type(self.mirror_attention_map)}')
     return StableDiffusionXLPipelineOutput(images=image)

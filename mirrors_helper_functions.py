@@ -42,9 +42,16 @@ def custom_scaled_dot_product_attention(query,
       concatenated_current_module_attention_maps = current_step_attention_map_mean_over_heads
     else:
       concatenated_current_module_attention_maps = np.concatenate((concatenated_current_module_attention_maps, current_step_attention_map_mean_over_heads), axis=0)
-
+    
+    # TODO: Remove line below if not necessary
+    normalized_attention_map = None
+    
     if concatenated_current_module_attention_maps.shape[0] == 50:
       if module_name == "up_blocks.0.attentions.1.transformer_blocks.1.attn2":
+        normalized_attention_map = get_last_timestep_attention_map_of_given_module(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+                              tokenized_prompt=tokenized_prompt, 
+                              module_name=module_name,
+                              )
         # display_last_attention_map_of_given_module_over_all_timesteps(concatenated_attention_maps=concatenated_current_module_attention_maps, 
         #                       tokenized_prompt=tokenized_prompt, 
         #                       module_name=module_name,
@@ -58,13 +65,13 @@ def custom_scaled_dot_product_attention(query,
         #                       module_name=module_name,
         #                       average_flag=False
         #                       )
-        display_edges_using_canny_edge_detector(concatenated_attention_maps=concatenated_current_module_attention_maps, 
-                              tokenized_prompt=tokenized_prompt, 
-                              module_name=module_name)
+        # display_edges_using_canny_edge_detector(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+        #                       tokenized_prompt=tokenized_prompt, 
+        #                       module_name=module_name)
       concatenated_attention_maps_over_all_steps_and_attention_modules = concatenate_current_module_attention_maps_to_all_attention_maps(concatenated_current_module_attention_maps, 
                                                                       concatenated_attention_maps_over_all_steps_and_attention_modules)
     output = torch.matmul(attention_weights, value)
-    return output, concatenated_current_module_attention_maps, concatenated_attention_maps_over_all_steps_and_attention_modules
+    return output, concatenated_current_module_attention_maps, concatenated_attention_maps_over_all_steps_and_attention_modules, normalized_attention_map
 
 
 def concatenate_current_module_attention_maps_to_all_attention_maps(concatenated_current_module_attention_maps: torch.Tensor = None, 
@@ -99,10 +106,8 @@ def display_attention_maps_per_layer(concatenated_attention_maps: np.array,
                            ) -> None:
     if average_flag:
       average_concatenated_attention_maps_over_all_timesteps = concatenated_attention_maps.mean(axis=0)
-      print("average flag is on")
     else:
       average_concatenated_attention_maps_over_all_timesteps = concatenated_attention_maps[-5,:,:]
-      print("average flag is off")
     
     image_resolution_height_and_width = int(math.sqrt(average_concatenated_attention_maps_over_all_timesteps.shape[0]))
     
@@ -218,7 +223,7 @@ def display_edges_using_canny_edge_detector(
 
     print(f"Inside 'display_edges_using_canny_edge_detector', concatenated_attention_maps shape is: {concatenated_attention_maps.shape}")
     attention_map_tensor = concatenated_attention_maps[-1, :, mirror_token_index].reshape(32, 32).astype(np.float32)
-    upsampled_attention_map_tensor = cv2.resize(attention_map_tensor, (512, 512))
+    upsampled_attention_map_tensor = cv2.resize(attention_map_tensor, (1024, 1024))
     
     scaled_attention_map_ndarray = (upsampled_attention_map_tensor * 255).astype(np.uint8)
     mean_value = np.mean(scaled_attention_map_ndarray)
@@ -240,5 +245,29 @@ def display_edges_using_canny_edge_detector(
     
     plt.show()
 
+def get_last_timestep_attention_map_of_given_module(
+    concatenated_attention_maps: np.ndarray,
+    tokenized_prompt: list = None,
+    module_name: str = ""
+    ) -> np.ndarray:
+    tokens = ["start"] + tokenized_prompt + ["end"]
+    mirror_token_index = tokens.index("mirror</w>") if "mirror</w>" in tokens else -1
+    if mirror_token_index == -1:
+        print("Token 'mirror</w>' not found in tokens list.")
+        return
+    
+    attention_map = concatenated_attention_maps[-1, :, mirror_token_index].reshape(32, 32).astype(np.float32)
+    
+    min_value = np.min(attention_map)
+    max_value = np.max(attention_map)
+    normalized_upsampled_attention_map = (attention_map - min_value) / (max_value - min_value)
+    
+    return normalized_upsampled_attention_map
 
+def preprocess_and_upsample_attention_map(kernel_size: tuple=(0,0), attention_map: np.ndarray=None, image_target_size: tuple=(1024, 1024)) -> np.ndarray:
+    kernel = np.ones(kernel_size, np.uint8)
+    dilated_attention_map = cv2.dilate(attention_map, kernel, iterations=1)
+    closed_attention_map = cv2.morphologyEx(dilated_attention_map, cv2.MORPH_CLOSE, kernel)
+    upsampled_attention_map = cv2.resize(closed_attention_map, image_target_size)
+    return upsampled_attention_map
     
