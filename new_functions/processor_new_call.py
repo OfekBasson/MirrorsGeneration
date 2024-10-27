@@ -68,7 +68,7 @@ def new_processor_call(
         key = attn.norm_k(key)
 
     # TODO: add support for attn.scale when we move to Torch 2.1
-    hidden_states, calculated_concatenated_attention_maps, concatenated_attention_maps_over_all_steps_and_attention_modules, normalized_upsampled_attention_map = custom_scaled_dot_product_attention(
+    hidden_states, calculated_concatenated_attention_maps, concatenated_attention_maps_over_all_steps_and_attention_modules, normalized_attention_map = custom_scaled_dot_product_attention(
         query, 
         key, 
         value, 
@@ -83,8 +83,8 @@ def new_processor_call(
     self.concatenated_attention_maps = calculated_concatenated_attention_maps
     # TODO: I keep it only for the self (=processor) and not for the pipe
     self.pipe.concatenated_attention_maps_over_all_steps_and_attention_modules = concatenated_attention_maps_over_all_steps_and_attention_modules
-    if normalized_upsampled_attention_map is not None:
-        self.pipe.mirror_attention_map = normalized_upsampled_attention_map
+    if normalized_attention_map is not None:
+        self.pipe.mirror_attention_map = normalized_attention_map
 
     hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
     hidden_states = hidden_states.to(query.dtype)
