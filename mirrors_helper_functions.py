@@ -269,13 +269,13 @@ def get_avg_attention_map_of_given_module_over_timestep_range(
     
     return normalized_upsampled_attention_map
 
-def preprocess_and_upsample_attention_map(kernel_size: tuple=(2, 2), attention_map: np.ndarray=None, image_target_size: tuple=(1024, 1024)) -> np.ndarray:
+# def preprocess_and_upsample_attention_map(kernel_size: tuple=(2, 2), attention_map: np.ndarray=None, image_target_size: tuple=(1024, 1024)) -> np.ndarray:
     # kernel = np.ones(kernel_size, np.uint8)
     # dilated_attention_map = cv2.dilate(attention_map, kernel, iterations=1)
     # closed_attention_map = cv2.morphologyEx(dilated_attention_map, cv2.MORPH_CLOSE, kernel)
     # upsampled_attention_map = cv2.resize(closed_attention_map, image_target_size)
-    upsampled_attention_map = cv2.resize(attention_map, image_target_size)
-    return upsampled_attention_map
+    # upsampled_attention_map = cv2.resize(attention_map, image_target_size)
+    # return upsampled_attention_map
 
 
 def display_images(images, titles, figsize=(24, 5), max_images_per_row=3):
@@ -308,7 +308,7 @@ def generate_mirror_mask(image: np.ndarray=None, mirror_attention_map: np.ndarra
         scaled_attention_map
     ]
     titles = [
-        "Original Image",
+        "Selected Mask",
         "Grayscale Original Image",
         "Scaled Att Map After Sigmoid",
     ]
@@ -317,15 +317,14 @@ def generate_mirror_mask(image: np.ndarray=None, mirror_attention_map: np.ndarra
     
     areas_and_maps = []
     
-    preprocess_attention_map_current_kernel = preprocess_and_upsample_attention_map(kernel_size=kernel_size, attention_map=scaled_attention_map)
+    resized_attention_map = cv2.resize(scaled_attention_map, (1024, 1024))
     for percentile_value in percentile_values:
-        threshold_value = np.percentile(preprocess_attention_map_current_kernel, percentile_value)
-        thresholded_map = np.where(preprocess_attention_map_current_kernel > threshold_value, 1, 0).astype(np.uint8)
+        threshold_value = np.percentile(resized_attention_map, percentile_value)
+        thresholded_map = np.where(resized_attention_map > threshold_value, 1, 0).astype(np.uint8)
         contours, _ = cv2.findContours(thresholded_map, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         if contours:
             largest_contour = max(contours, key=cv2.contourArea)
-            largest_contour_area = cv2.contourArea(largest_contour)
 
             # Create a blank mask to draw smoothed contour
             smoothed_map = np.zeros_like(thresholded_map)
@@ -334,14 +333,17 @@ def generate_mirror_mask(image: np.ndarray=None, mirror_attention_map: np.ndarra
             smoothed_contour = cv2.approxPolyDP(largest_contour, epsilon, True)
             current_image = np.copy(image_np)
             cv2.drawContours(current_image, [smoothed_contour], -1, (0, 0, 255), thickness=2)
-
+            # TODO: Implement calculate_mask_precision_ratio
+            mask_precision_ratio = calculate_mask_precision_ratio(...)
             images.append(current_image)
-            titles.append(f"Smoothed AttMap (ker {kernel_size}), Thr per {percentile_value},\nArea {int(largest_contour_area)}")
+            titles.append(f"Smoothed AttMap, Thr per {percentile_value},\nMask Precision Ratio: {mask_precision_ratio}")
             
-            areas_and_maps.append((largest_contour_area, current_image, f"Ker {kernel_size}, Thr {percentile_value},\nArea {int(largest_contour_area)}"))
+            
+            
+            areas_and_maps.append((mask_precision_ratio, current_image, f"Thr {percentile_value},\nMask Precision Ratio: {mask_precision_ratio}"))
         else:
             images.append(thresholded_map)
-            titles.append(f"Thr Att Map (PP with ker {kernel_size}) by per {percentile_value},\nArea: None")
+            titles.append(f"Thr Att Map by per {percentile_value},\nArea: None")
 
     areas_and_maps.sort(key=lambda x: x[0])
     
@@ -371,15 +373,8 @@ def generate_mirror_mask(image: np.ndarray=None, mirror_attention_map: np.ndarra
         if difference > max_difference:
             max_difference = difference
             selected_map = areas_and_maps[i][1]
+            images[0] = selected_map
             selected_title = areas_and_maps[i][2]
-
-    plt.figure(figsize=(6, 6))
-    plt.imshow(selected_map, cmap="gray")
-    plt.title(f"Map with Largest Difference: {selected_title}")
-    plt.axis("off")
-    plt.show()
-    
-
 
 
     # Call display function
