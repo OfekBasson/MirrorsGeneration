@@ -47,29 +47,33 @@ def custom_scaled_dot_product_attention(query,
     normalized_attention_map = None
     
     if concatenated_current_module_attention_maps.shape[0] == 50:
-      if module_name == "up_blocks.0.attentions.1.transformer_blocks.1.attn2":
-        normalized_attention_map = get_last_timestep_attention_map_of_given_module(concatenated_attention_maps=concatenated_current_module_attention_maps, 
-                              tokenized_prompt=tokenized_prompt, 
-                              module_name=module_name,
-                              )
-        # display_last_attention_map_of_given_module_over_all_timesteps(concatenated_attention_maps=concatenated_current_module_attention_maps, 
-        #                       tokenized_prompt=tokenized_prompt, 
-        #                       module_name=module_name,
-        #                       )
-        # display_thresholded_attention_map_of_given_module(concatenated_attention_maps=concatenated_current_module_attention_maps, 
-        #                       tokenized_prompt=tokenized_prompt, 
-        #                       module_name=module_name
-        # )
+        # TODO: Remove line below?
+        concatenated_attention_maps_over_all_steps_and_attention_modules = None
         # display_attention_maps_per_layer(concatenated_attention_maps=concatenated_current_module_attention_maps, 
         #                       tokenized_prompt=tokenized_prompt, 
         #                       module_name=module_name,
         #                       average_flag=False
         #                       )
+        if module_name == "up_blocks.0.attentions.1.transformer_blocks.1.attn2":
+            normalized_attention_map = get_avg_attention_map_of_given_module_over_timestep_range(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+                                tokenized_prompt=tokenized_prompt, 
+                                module_name=module_name,
+                                timestep_range=(11, 16)
+                                )
+            # display_last_attention_map_of_given_module_over_all_timesteps(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+            #                   tokenized_prompt=tokenized_prompt, 
+            #                   module_name=module_name,
+            #                   )
+        # display_thresholded_attention_map_of_given_module(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+        #                       tokenized_prompt=tokenized_prompt, 
+        #                       module_name=module_name
+        # )
+        
         # display_edges_using_canny_edge_detector(concatenated_attention_maps=concatenated_current_module_attention_maps, 
         #                       tokenized_prompt=tokenized_prompt, 
         #                       module_name=module_name)
-      concatenated_attention_maps_over_all_steps_and_attention_modules = concatenate_current_module_attention_maps_to_all_attention_maps(concatenated_current_module_attention_maps, 
-                                                                      concatenated_attention_maps_over_all_steps_and_attention_modules)
+    #   concatenated_attention_maps_over_all_steps_and_attention_modules = concatenate_current_module_attention_maps_to_all_attention_maps(concatenated_current_module_attention_maps, 
+                                                                    #   concatenated_attention_maps_over_all_steps_and_attention_modules)
     output = torch.matmul(attention_weights, value)
     return output, concatenated_current_module_attention_maps, concatenated_attention_maps_over_all_steps_and_attention_modules, normalized_attention_map
 
@@ -245,10 +249,11 @@ def display_edges_using_canny_edge_detector(
     
     plt.show()
 
-def get_last_timestep_attention_map_of_given_module(
+def get_avg_attention_map_of_given_module_over_timestep_range(
     concatenated_attention_maps: np.ndarray,
     tokenized_prompt: list = None,
-    module_name: str = ""
+    module_name: str = "",
+    timestep_range: tuple = (11, 16)
     ) -> np.ndarray:
     tokens = ["start"] + tokenized_prompt + ["end"]
     mirror_token_index = tokens.index("mirror</w>") if "mirror</w>" in tokens else -1
@@ -256,7 +261,7 @@ def get_last_timestep_attention_map_of_given_module(
         print("Token 'mirror</w>' not found in tokens list.")
         return
     
-    attention_map = concatenated_attention_maps[-1, :, mirror_token_index].reshape(32, 32).astype(np.float32)
+    attention_map =  np.mean(concatenated_attention_maps[timestep_range[0]:timestep_range[1], :, mirror_token_index], axis=0).reshape(32, 32).astype(np.float32)
     
     min_value = np.min(attention_map)
     max_value = np.max(attention_map)
@@ -264,15 +269,16 @@ def get_last_timestep_attention_map_of_given_module(
     
     return normalized_upsampled_attention_map
 
-def preprocess_and_upsample_attention_map(kernel_size: tuple=(1,1), attention_map: np.ndarray=None, image_target_size: tuple=(1024, 1024)) -> np.ndarray:
-    kernel = np.ones(kernel_size, np.uint8)
-    dilated_attention_map = cv2.dilate(attention_map, kernel, iterations=1)
-    closed_attention_map = cv2.morphologyEx(dilated_attention_map, cv2.MORPH_CLOSE, kernel)
-    upsampled_attention_map = cv2.resize(closed_attention_map, image_target_size)
+def preprocess_and_upsample_attention_map(kernel_size: tuple=(2, 2), attention_map: np.ndarray=None, image_target_size: tuple=(1024, 1024)) -> np.ndarray:
+    # kernel = np.ones(kernel_size, np.uint8)
+    # dilated_attention_map = cv2.dilate(attention_map, kernel, iterations=1)
+    # closed_attention_map = cv2.morphologyEx(dilated_attention_map, cv2.MORPH_CLOSE, kernel)
+    # upsampled_attention_map = cv2.resize(closed_attention_map, image_target_size)
+    upsampled_attention_map = cv2.resize(attention_map, image_target_size)
     return upsampled_attention_map
 
 
-def display_images(images, titles, figsize=(24, 5), max_images_per_row=5):
+def display_images(images, titles, figsize=(24, 5), max_images_per_row=3):
     num_images = len(images)
     num_rows = (num_images + max_images_per_row - 1) // max_images_per_row  # Calculate total rows needed
     fig, axes = plt.subplots(num_rows, max_images_per_row, figsize=(5 * max_images_per_row, 5 * num_rows))
@@ -293,67 +299,93 @@ def display_images(images, titles, figsize=(24, 5), max_images_per_row=5):
     
 def generate_mirror_mask(image: np.ndarray=None, mirror_attention_map: np.ndarray=None) -> np.ndarray:
     image_np = np.array(image)
-
     grayscale_image = np.array(image.convert("L"))
-
-    median_value = np.median(grayscale_image)
-    percentile_75 = np.percentile(grayscale_image, 75)
-    lower = int(max(0, median_value))
-    upper = int(min(255, percentile_75))
-
-    edges = cv2.Canny(grayscale_image, lower, upper)
-
     scaled_attention_map = 1 / (1 + np.exp(-5 * (mirror_attention_map - 0.5)))
-    preprocessed_attention_map = preprocess_and_upsample_attention_map(kernel_size=(1, 1), attention_map=scaled_attention_map)
-
-    threshold_value = np.percentile(scaled_attention_map, 75)
-    thresholded_attention_map = np.where(preprocessed_attention_map >= threshold_value, 1, 0)
-
-    multiplication_of_edges_and_thresholded_attention_map = edges * thresholded_attention_map
-
-    kernel = np.ones((18, 18), np.uint8)
-    dilated_edges = cv2.dilate(multiplication_of_edges_and_thresholded_attention_map.astype(np.uint8), kernel, iterations=1)
-    closed_edges = cv2.morphologyEx(dilated_edges, cv2.MORPH_CLOSE, kernel)
-
-    contours, _ = cv2.findContours(closed_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    contoured_image = image_np.copy()
-    cv2.drawContours(contoured_image, contours, -1, (0, 255, 0), 2)
-
-    largest_contour = max(contours, key=cv2.contourArea)
-    mirror_mask = np.zeros_like(image_np, dtype=np.uint8)
-    cv2.drawContours(mirror_mask, [largest_contour], -1, (255, 255, 255), thickness=cv2.FILLED)
-
-    mirror_mask_over_original_image = np.where(mirror_mask > 0.5, mirror_mask, image_np)
-
+    
     images = [
         image_np,
         grayscale_image,
-        edges,
-        preprocessed_attention_map,
-        thresholded_attention_map,
-        multiplication_of_edges_and_thresholded_attention_map,
-        closed_edges,
-        cv2.cvtColor(contoured_image, cv2.COLOR_BGR2RGB),
-        mirror_mask,
-        mirror_mask_over_original_image
+        scaled_attention_map
     ]
     titles = [
         "Original Image",
         "Grayscale Original Image",
-        "Edges of Greyscale Image (W/O any manipulation)",
-        "Preprocessed Attention Map",
-        "Thresholded Attention Map",
-        "Edges * Thresholded Attention Map",
-        "Thickened and Connected Edges",
-        "Contours on Original Image",
-        "Mirror Mask",
-        "Mirror Mask Over Original Image"
+        "Scaled Att Map After Sigmoid",
     ]
+    
+    percentile_values = [30, 40, 50, 60, 70, 80, 90]
+    
+    areas_and_maps = []
+    
+    preprocess_attention_map_current_kernel = preprocess_and_upsample_attention_map(kernel_size=kernel_size, attention_map=scaled_attention_map)
+    for percentile_value in percentile_values:
+        threshold_value = np.percentile(preprocess_attention_map_current_kernel, percentile_value)
+        thresholded_map = np.where(preprocess_attention_map_current_kernel > threshold_value, 1, 0).astype(np.uint8)
+        contours, _ = cv2.findContours(thresholded_map, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            largest_contour_area = cv2.contourArea(largest_contour)
+
+            # Create a blank mask to draw smoothed contour
+            smoothed_map = np.zeros_like(thresholded_map)
+
+            epsilon = 0.003 * cv2.arcLength(largest_contour, True)
+            smoothed_contour = cv2.approxPolyDP(largest_contour, epsilon, True)
+            current_image = np.copy(image_np)
+            cv2.drawContours(current_image, [smoothed_contour], -1, (0, 0, 255), thickness=2)
+
+            images.append(current_image)
+            titles.append(f"Smoothed AttMap (ker {kernel_size}), Thr per {percentile_value},\nArea {int(largest_contour_area)}")
+            
+            areas_and_maps.append((largest_contour_area, current_image, f"Ker {kernel_size}, Thr {percentile_value},\nArea {int(largest_contour_area)}"))
+        else:
+            images.append(thresholded_map)
+            titles.append(f"Thr Att Map (PP with ker {kernel_size}) by per {percentile_value},\nArea: None")
+
+    areas_and_maps.sort(key=lambda x: x[0])
+    
+    sorted_areas = [area for area, _, _ in areas_and_maps]
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(sorted_areas, marker='o')
+    plt.xlabel("Map Index (Sorted by Area)")
+    plt.ylabel("Area")
+    plt.title("Sorted Areas of Attention Maps")
+
+    # Add the titles as x-ticks
+    titles_for_xticks = [title for _, _, title in areas_and_maps]
+    plt.xticks(range(len(titles_for_xticks)), titles_for_xticks, rotation=90, fontsize=8)  # Adjust rotation and font size as needed
+    plt.tight_layout()
+    plt.show()
+
+    max_difference = 0
+    selected_map = None
+    selected_title = ""
+    
+    for i in range(1, len(areas_and_maps)):
+        area_current = areas_and_maps[i][0]
+        area_previous = areas_and_maps[i - 1][0]
+        difference = area_current - area_previous
+        
+        if difference > max_difference:
+            max_difference = difference
+            selected_map = areas_and_maps[i][1]
+            selected_title = areas_and_maps[i][2]
+
+    plt.figure(figsize=(6, 6))
+    plt.imshow(selected_map, cmap="gray")
+    plt.title(f"Map with Largest Difference: {selected_title}")
+    plt.axis("off")
+    plt.show()
+    
+
+
 
     # Call display function
     display_images(images, titles)
     
-    return mirror_mask
+    # return mirror_mask
+    return
         
         
