@@ -49,21 +49,21 @@ def custom_scaled_dot_product_attention(query,
     if concatenated_current_module_attention_maps.shape[0] == 50:
         # TODO: Remove line below?
         concatenated_attention_maps_over_all_steps_and_attention_modules = None
-        # display_attention_maps_per_layer(concatenated_attention_maps=concatenated_current_module_attention_maps, 
-        #                       tokenized_prompt=tokenized_prompt, 
-        #                       module_name=module_name,
-        #                       average_flag=False
-        #                       )
+        display_attention_maps_per_layer(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+                              tokenized_prompt=tokenized_prompt, 
+                              module_name=module_name,
+                              average_flag=False
+                              )
         if module_name == "up_blocks.0.attentions.1.transformer_blocks.1.attn2":
             normalized_attention_map = get_avg_attention_map_of_given_module_over_timestep_range(concatenated_attention_maps=concatenated_current_module_attention_maps, 
                                 tokenized_prompt=tokenized_prompt, 
                                 module_name=module_name,
                                 timestep_range=(11, 16)
                                 )
-            # display_last_attention_map_of_given_module_over_all_timesteps(concatenated_attention_maps=concatenated_current_module_attention_maps, 
-            #                   tokenized_prompt=tokenized_prompt, 
-            #                   module_name=module_name,
-            #                   )
+            display_last_attention_map_of_given_module_over_all_timesteps(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+                              tokenized_prompt=tokenized_prompt, 
+                              module_name=module_name,
+                              )
         # display_thresholded_attention_map_of_given_module(concatenated_attention_maps=concatenated_current_module_attention_maps, 
         #                       tokenized_prompt=tokenized_prompt, 
         #                       module_name=module_name
@@ -261,7 +261,13 @@ def get_avg_attention_map_of_given_module_over_timestep_range(
         print("Token 'mirror</w>' not found in tokens list.")
         return
     
-    attention_map =  np.mean(concatenated_attention_maps[timestep_range[0]:timestep_range[1], :, mirror_token_index], axis=0).reshape(32, 32).astype(np.float32)
+    attention_map = np.mean(
+    np.concatenate([
+        concatenated_attention_maps[timestep_range[0]:timestep_range[1], :, mirror_token_index],
+        concatenated_attention_maps[-3:, :, mirror_token_index]
+    ], axis=0),
+    axis=0
+    ).reshape(32, 32).astype(np.float32)
     
     min_value = np.min(attention_map)
     max_value = np.max(attention_map)
@@ -269,13 +275,12 @@ def get_avg_attention_map_of_given_module_over_timestep_range(
     
     return normalized_upsampled_attention_map
 
-# def preprocess_and_upsample_attention_map(kernel_size: tuple=(2, 2), attention_map: np.ndarray=None, image_target_size: tuple=(1024, 1024)) -> np.ndarray:
-    # kernel = np.ones(kernel_size, np.uint8)
-    # dilated_attention_map = cv2.dilate(attention_map, kernel, iterations=1)
-    # closed_attention_map = cv2.morphologyEx(dilated_attention_map, cv2.MORPH_CLOSE, kernel)
-    # upsampled_attention_map = cv2.resize(closed_attention_map, image_target_size)
-    # upsampled_attention_map = cv2.resize(attention_map, image_target_size)
-    # return upsampled_attention_map
+def preprocess_and_upsample_attention_map(kernel_size: tuple=(2, 2), attention_map: np.ndarray=None, image_target_size: tuple=(1024, 1024)) -> np.ndarray:
+    kernel = np.ones(kernel_size, np.uint8)
+    dilated_attention_map = cv2.dilate(attention_map, kernel, iterations=1)
+    closed_attention_map = cv2.morphologyEx(dilated_attention_map, cv2.MORPH_CLOSE, kernel)
+    upsampled_attention_map = cv2.resize(closed_attention_map, image_target_size)
+    return upsampled_attention_map
 
 
 def display_images(images, titles, figsize=(24, 5), max_images_per_row=3):
@@ -315,9 +320,10 @@ def generate_mirror_mask(image: np.ndarray=None, mirror_attention_map: np.ndarra
     
     percentile_values = [30, 40, 50, 60, 70, 80, 90]
     
-    areas_and_maps = []
+    areas_ratios_and_maps = []
     
-    resized_attention_map = cv2.resize(scaled_attention_map, (1024, 1024))
+    resized_attention_map = preprocess_and_upsample_attention_map(attention_map=scaled_attention_map)
+    # resized_attention_map = cv2.resize(scaled_attention_map, (1024, 1024))
     for percentile_value in percentile_values:
         threshold_value = np.percentile(resized_attention_map, percentile_value)
         thresholded_map = np.where(resized_attention_map > threshold_value, 1, 0).astype(np.uint8)
@@ -325,29 +331,23 @@ def generate_mirror_mask(image: np.ndarray=None, mirror_attention_map: np.ndarra
         
         if contours:
             largest_contour = max(contours, key=cv2.contourArea)
-
-            # Create a blank mask to draw smoothed contour
-            smoothed_map = np.zeros_like(thresholded_map)
-
-            epsilon = 0.003 * cv2.arcLength(largest_contour, True)
-            smoothed_contour = cv2.approxPolyDP(largest_contour, epsilon, True)
+            area = cv2.contourArea(largest_contour)
             current_image = np.copy(image_np)
-            cv2.drawContours(current_image, [smoothed_contour], -1, (0, 0, 255), thickness=2)
-            # TODO: Implement calculate_mask_precision_ratio
-            mask_precision_ratio = calculate_mask_precision_ratio(...)
+            cv2.drawContours(current_image, [largest_contour], -1, (0, 0, 255), thickness=2)
+            mask_precision_ratio = calculate_mask_precision_ratio(largest_contour, resized_attention_map)
             images.append(current_image)
             titles.append(f"Smoothed AttMap, Thr per {percentile_value},\nMask Precision Ratio: {mask_precision_ratio}")
             
             
             
-            areas_and_maps.append((mask_precision_ratio, current_image, f"Thr {percentile_value},\nMask Precision Ratio: {mask_precision_ratio}"))
+            areas_ratios_and_maps.append((mask_precision_ratio, area, current_image, f"Thr {percentile_value},\nMask Precision Ratio: {mask_precision_ratio}\n Area {area}"))
         else:
             images.append(thresholded_map)
             titles.append(f"Thr Att Map by per {percentile_value},\nArea: None")
 
-    areas_and_maps.sort(key=lambda x: x[0])
+    areas_ratios_and_maps.sort(key=lambda x: x[0])
     
-    sorted_areas = [area for area, _, _ in areas_and_maps]
+    sorted_areas = [area for _, area, _, _ in areas_ratios_and_maps]
 
     plt.figure(figsize=(8, 5))
     plt.plot(sorted_areas, marker='o')
@@ -356,25 +356,31 @@ def generate_mirror_mask(image: np.ndarray=None, mirror_attention_map: np.ndarra
     plt.title("Sorted Areas of Attention Maps")
 
     # Add the titles as x-ticks
-    titles_for_xticks = [title for _, _, title in areas_and_maps]
+    titles_for_xticks = [title for _, _, _, title in areas_ratios_and_maps]
     plt.xticks(range(len(titles_for_xticks)), titles_for_xticks, rotation=90, fontsize=8)  # Adjust rotation and font size as needed
     plt.tight_layout()
     plt.show()
 
-    max_difference = 0
-    selected_map = None
-    selected_title = ""
+    highest_ratio_entry = max(areas_ratios_and_maps, key=lambda x: x[0])
+    highest_ratio_image, highest_ratio_title = highest_ratio_entry[2], highest_ratio_entry[3]
+    images[0] = highest_ratio_image
+    titles[0] = "Selected Mask: " + highest_ratio_title
     
-    for i in range(1, len(areas_and_maps)):
-        area_current = areas_and_maps[i][0]
-        area_previous = areas_and_maps[i - 1][0]
-        difference = area_current - area_previous
+    # max_difference = 0
+    # selected_map = None
+    # selected_title = ""
+    
+    # for i in range(1, len(areas_ratios_and_maps)):
+    #     area_current = areas_ratios_and_maps[i][0]
+    #     area_previous = areas_ratios_and_maps[i - 1][0]
+    #     difference = area_current - area_previous
         
-        if difference > max_difference:
-            max_difference = difference
-            selected_map = areas_and_maps[i][1]
-            images[0] = selected_map
-            selected_title = areas_and_maps[i][2]
+    #     if difference > max_difference:
+    #         max_difference = difference
+    #         selected_map = areas_ratios_and_maps[i][1]
+    #         images[0] = selected_map
+    #         selected_title = areas_ratios_and_maps[i][2]
+    #         titles[0] = "Selected Mask:" + selected_title
 
 
     # Call display function
@@ -384,3 +390,17 @@ def generate_mirror_mask(image: np.ndarray=None, mirror_attention_map: np.ndarra
     return
         
         
+def calculate_mask_precision_ratio(smoothed_contour, attention_map: np.ndarray=None) -> float:
+    mask = np.zeros(attention_map.shape, dtype=np.uint8)
+    
+    cv2.fillPoly(mask, [smoothed_contour], 1)
+    
+    inside_pixels = attention_map[mask == 1]
+    inside_avg = np.mean(inside_pixels) if inside_pixels.size > 0 else 0
+
+    outside_pixels = attention_map[mask == 0]
+    outside_avg = np.mean(outside_pixels) if outside_pixels.size > 0 else 0
+
+    precision_ratio = inside_avg / outside_avg if outside_avg != 0 else float('inf')
+    
+    return precision_ratio
