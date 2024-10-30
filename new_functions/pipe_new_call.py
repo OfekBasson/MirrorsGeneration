@@ -72,6 +72,8 @@ def pipe_new_call(
     negative_crops_coords_top_left: Tuple[int, int] = (0, 0),
     negative_target_size: Optional[Tuple[int, int]] = None,
     clip_skip: Optional[int] = None,
+    display_option: str = None,
+    module_to_display: str = None,
     callback_on_step_end: Optional[
         Union[Callable[[int, int, Dict], None], PipelineCallback, MultiPipelineCallbacks]
     ] = None,
@@ -228,6 +230,8 @@ def pipe_new_call(
             module.forward = new_attention_module_forward.__get__(module, Transformer2DModel)
             module.processor.concatenated_attention_maps = None
             module.processor.pipe = self
+            module.processor.display_option = display_option
+            module.processor.module_to_display = module_to_display
             # module.processor.concatenated_attention_maps_over_all_steps_and_attention_modules = self.concatenated_attention_maps_over_all_steps_and_attention_modules
     
     callback = kwargs.pop("callback", None)

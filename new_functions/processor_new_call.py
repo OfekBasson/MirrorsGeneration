@@ -79,6 +79,8 @@ def new_processor_call(
         tokenized_prompt=tokenized_prompt,
         module_name = module_name,
         concatenated_attention_maps_over_all_steps_and_attention_modules = self.pipe.concatenated_attention_maps_over_all_steps_and_attention_modules,
+        display_option = self.display_option,
+        module_to_display = self.module_to_display
     )
     self.concatenated_attention_maps = calculated_concatenated_attention_maps
     # TODO: I keep it only for the self (=processor) and not for the pipe

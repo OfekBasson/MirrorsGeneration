@@ -1,6 +1,5 @@
 # TODO: Object oriented? maybe get all of them into one class?
 # TODO: Reorder imports
-# TODO: Auto formatting
 import cv2
 import torch
 import torch.nn.functional as F
@@ -9,6 +8,10 @@ import matplotlib.pyplot as plt
 import math
 from diffusers import StableDiffusionXLPipeline
 from diffusers.models.attention import Attention
+from scipy.ndimage import binary_dilation
+from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
+import PIL
+import random
 
 # TODO: Should I transform the "list" into "Optional[List] or something? what are the differences between both?"
 def register_tokenized_prompt_and_module_name_and_index_into_pipe_and_its_attention_modules(pipe: StableDiffusionXLPipeline = None, tokenized_prompt: list = None) -> None:
@@ -29,6 +32,8 @@ def custom_scaled_dot_product_attention(query,
                                         tokenized_prompt: list = None,
                                         module_name: str = "",
                                         concatenated_attention_maps_over_all_steps_and_attention_modules: torch.Tensor = None,
+                                        display_option: str = None,
+                                        module_to_display: str = None
                                         ):
     d_k = query.size(-1)  
     scores = torch.matmul(query, key.transpose(-2, -1)) / torch.sqrt(torch.tensor(d_k, dtype=torch.float32))
@@ -49,21 +54,24 @@ def custom_scaled_dot_product_attention(query,
     if concatenated_current_module_attention_maps.shape[0] == 50:
         # TODO: Remove line below?
         concatenated_attention_maps_over_all_steps_and_attention_modules = None
-        display_attention_maps_per_layer(concatenated_attention_maps=concatenated_current_module_attention_maps, 
-                              tokenized_prompt=tokenized_prompt, 
-                              module_name=module_name,
-                              average_flag=False
-                              )
-        if module_name == "up_blocks.0.attentions.1.transformer_blocks.1.attn2":
-            normalized_attention_map = get_avg_attention_map_of_given_module_over_timestep_range(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+        if display_option == "Display attention map per layer":
+            display_attention_maps_per_layer(concatenated_attention_maps=concatenated_current_module_attention_maps, 
                                 tokenized_prompt=tokenized_prompt, 
                                 module_name=module_name,
-                                timestep_range=(11, 16)
+                                average_flag=False
                                 )
-            display_last_attention_map_of_given_module_over_all_timesteps(concatenated_attention_maps=concatenated_current_module_attention_maps, 
-                              tokenized_prompt=tokenized_prompt, 
-                              module_name=module_name,
-                              )
+        if module_name == module_to_display:
+            if display_option == "Display average attention map of given module over timestep range":
+                    normalized_attention_map = get_avg_attention_map_of_given_module_over_timestep_range(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+                                        tokenized_prompt=tokenized_prompt, 
+                                        module_name=module_name,
+                                        timestep_range=(11, 16)
+                                        )
+            if display_option == "Display attention map of given module over all timesteps":
+                    display_attention_map_of_given_module_over_all_timesteps(concatenated_attention_maps=concatenated_current_module_attention_maps, 
+                                    tokenized_prompt=tokenized_prompt, 
+                                    module_name=module_name,
+                                    )
         # display_thresholded_attention_map_of_given_module(concatenated_attention_maps=concatenated_current_module_attention_maps, 
         #                       tokenized_prompt=tokenized_prompt, 
         #                       module_name=module_name
@@ -140,7 +148,7 @@ def display_attention_maps_per_layer(concatenated_attention_maps: np.array,
     plt.show()
 
 
-def display_last_attention_map_of_given_module_over_all_timesteps(
+def display_attention_map_of_given_module_over_all_timesteps(
     concatenated_attention_maps: np.ndarray,
     tokenized_prompt: list = None,
     module_name: str = ""
@@ -365,28 +373,9 @@ def generate_mirror_mask(image: np.ndarray=None, mirror_attention_map: np.ndarra
     highest_ratio_image, highest_ratio_title = highest_ratio_entry[2], highest_ratio_entry[3]
     images[0] = highest_ratio_image
     titles[0] = "Selected Mask: " + highest_ratio_title
-    
-    # max_difference = 0
-    # selected_map = None
-    # selected_title = ""
-    
-    # for i in range(1, len(areas_ratios_and_maps)):
-    #     area_current = areas_ratios_and_maps[i][0]
-    #     area_previous = areas_ratios_and_maps[i - 1][0]
-    #     difference = area_current - area_previous
-        
-    #     if difference > max_difference:
-    #         max_difference = difference
-    #         selected_map = areas_ratios_and_maps[i][1]
-    #         images[0] = selected_map
-    #         selected_title = areas_ratios_and_maps[i][2]
-    #         titles[0] = "Selected Mask:" + selected_title
 
-
-    # Call display function
     display_images(images, titles)
     
-    # return mirror_mask
     return
         
         
@@ -404,3 +393,35 @@ def calculate_mask_precision_ratio(smoothed_contour, attention_map: np.ndarray=N
     precision_ratio = inside_avg / outside_avg if outside_avg != 0 else float('inf')
     
     return precision_ratio
+
+def display_SAM_masks(image: PIL.Image.Image=None, mirror_attention_mask: np.ndarray=None) -> None:
+    scaled_attention_map = 1 / (1 + np.exp(-5 * (mirror_attention_mask - 0.5)))
+    
+    resized_attention_map = preprocess_and_upsample_attention_map(attention_map=scaled_attention_map)
+    
+    sam_model = sam_model_registry["vit_h"](checkpoint="sam_vit_h.pth")
+    mask_generator = SamAutomaticMaskGenerator(sam_model)
+
+    image_np = np.array(image)
+    masks = mask_generator.generate(image_np)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+
+    ax1.imshow(image)
+    mask_colors = [(random.random(), random.random(), random.random()) for _ in masks]
+    for mask, color in zip(masks, mask_colors):
+        mask_array = mask["segmentation"]
+        outline = binary_dilation(mask_array) & ~mask_array
+        ax1.contour(outline, colors=[color], linewidths=1)
+    ax1.axis("off")
+    ax1.set_title("SAM Masks on Image")
+
+    ax2.imshow(resized_attention_map, cmap="gray")
+    for mask, color in zip(masks, mask_colors):
+        mask_array = mask["segmentation"]
+        outline = binary_dilation(mask_array) & ~mask_array
+        ax2.contour(outline, colors=[color], linewidths=1)
+    ax2.axis("off")
+    ax2.set_title("SAM Masks on Mirror Attention Mask")
+
+    plt.show()
